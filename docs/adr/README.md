@@ -33,5 +33,6 @@ keeps the reasoning mine rather than something backfilled by a model.
 | [0021](0021-design-system.md) | Design system: PracticeDepth tokens, violet accent | Accepted |
 | [0022](0022-chats-are-collections.md) | A chat is a collection with a different kind | Accepted |
 | [0023](0023-ship-a-trace-viewer.md) | Ship a trace viewer, so the OTel claim is checkable | Accepted |
+| [0024](0024-span-level-attribution.md) | Span-level attribution: lexical, client-side, allowed to decline | Accepted |
 
 Use [`TEMPLATE.md`](TEMPLATE.md) for new ones.

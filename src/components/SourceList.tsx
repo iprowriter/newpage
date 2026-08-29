@@ -4,6 +4,13 @@ import { useState } from "react";
 
 import type { Source } from "./types";
 
+export interface SourceHighlight {
+  chunkId: string;
+  /** Offsets into that source's displayText. */
+  start: number;
+  end: number;
+}
+
 /**
  * Provenance, one click from the answer and with no navigation (ADR-0019).
  *
@@ -11,8 +18,28 @@ import type { Source } from "./types";
  * wants to see how close the second-best match was, and a citation you cannot
  * inspect is a claim rather than evidence.
  */
-export function SourceList({ sources, cited }: { sources: Source[]; cited: number[] }) {
+export function SourceList({
+  sources,
+  cited,
+  highlight,
+}: {
+  sources: Source[];
+  cited: number[];
+  highlight?: SourceHighlight | null;
+}) {
   const [openId, setOpenId] = useState<string | null>(null);
+
+  // Attribution opens the passage it landed on, rather than asking the reader to
+  // find it: being told "source 3" and then having to go clicking is the work the
+  // feature exists to remove. Adjusting during render rather than in an effect —
+  // a new highlight is derived state, not a synchronisation with anything
+  // outside React, and an effect here would render the list closed for a frame
+  // and then snap it open.
+  const [tracked, setTracked] = useState(highlight);
+  if (highlight !== tracked) {
+    setTracked(highlight);
+    if (highlight) setOpenId(highlight.chunkId);
+  }
 
   if (sources.length === 0) return null;
 
@@ -51,13 +78,36 @@ export function SourceList({ sources, cited }: { sources: Source[]; cited: numbe
             </button>
             {open && (
               <p className="border-t-[0.5px] border-line px-3 py-2.5 text-[13px] leading-relaxed text-body">
-                {source.displayText}
+                {highlight?.chunkId === source.chunkId ? (
+                  <Highlighted text={source.displayText} start={highlight.start} end={highlight.end} />
+                ) : (
+                  source.displayText
+                )}
               </p>
             )}
           </li>
         );
       })}
     </ul>
+  );
+}
+
+/**
+ * The matched span, marked in place inside the full passage.
+ *
+ * Showing the span alone would be a worse citation than the one it replaces: the
+ * reader could not see what surrounds it, which is the context that tells them
+ * whether the answer used it fairly.
+ */
+function Highlighted({ text, start, end }: { text: string; start: number; end: number }) {
+  return (
+    <>
+      {text.slice(0, start)}
+      <mark className="rounded-[3px] bg-citation-tint px-0.5 text-accent-on-tint">
+        {text.slice(start, end)}
+      </mark>
+      {text.slice(end)}
+    </>
   );
 }
 

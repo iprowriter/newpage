@@ -1,10 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
+
+import { attribute, type Attribution } from "@/lib/rag/attribute";
 
 import { AnswerFeedback } from "./AnswerFeedback";
 import { SourceList } from "./SourceList";
-import type { AnswerPayload } from "./types";
+import type { AnswerPayload, Source } from "./types";
+
+/** Where to float the "where's this from?" button, relative to the answer card. */
+interface SelectionAnchor {
+  text: string;
+  top: number;
+  left: number;
+}
+
+/** Null once asked and answered: the selection matched nothing well enough to show. */
+type Traced = { attribution: Attribution | null } | null;
 
 export function AnswerCard({
   payload,
@@ -14,11 +26,69 @@ export function AnswerCard({
   onFollowUp: (question: string) => void;
 }) {
   const [showProvenance, setShowProvenance] = useState(payload.outcome === "refused");
+  const [anchor, setAnchor] = useState<SelectionAnchor | null>(null);
+  const [traced, setTraced] = useState<Traced>(null);
+  const answerRef = useRef<HTMLDivElement>(null);
   const refused = payload.outcome === "refused";
+
+  // Reading the selection on release rather than on every selectionchange keeps
+  // this off the drag path, so selecting text feels exactly as it does anywhere
+  // else on the page.
+  const onSelect = useCallback(() => {
+    const container = answerRef.current;
+    const selection = window.getSelection();
+    if (!container || !selection || selection.isCollapsed || selection.rangeCount === 0) {
+      setAnchor(null);
+      return;
+    }
+
+    const range = selection.getRangeAt(0);
+    if (!container.contains(range.commonAncestorContainer)) {
+      setAnchor(null);
+      return;
+    }
+
+    const text = selection.toString().trim();
+    if (text.length === 0) {
+      setAnchor(null);
+      return;
+    }
+
+    const rect = range.getBoundingClientRect();
+    const bounds = container.getBoundingClientRect();
+    setAnchor({ text, top: rect.top - bounds.top - 34, left: rect.left - bounds.left });
+    setTraced(null);
+  }, []);
+
+  const trace = useCallback(() => {
+    if (!anchor) return;
+    setTraced({ attribution: attribute(anchor.text, payload.sources) });
+    setShowProvenance(true);
+    setAnchor(null);
+    window.getSelection()?.removeAllRanges();
+  }, [anchor, payload.sources]);
 
   return (
     <div className="flex flex-col gap-3">
-      {refused ? <Refusal payload={payload} /> : <Answer payload={payload} />}
+      <div ref={answerRef} className="relative" onMouseUp={onSelect} onKeyUp={onSelect}>
+        {refused ? <Refusal payload={payload} /> : <Answer payload={payload} />}
+        {anchor && !refused && (
+          <button
+            type="button"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={trace}
+            style={{ top: Math.max(anchor.top, 4), left: Math.max(anchor.left, 0) }}
+            // Inverted rather than tinted: this floats over the answer card, so
+            // anything built from --surface disappears into it. --ink over
+            // --surface is the one pair guaranteed to inverse in both themes
+            // without a new token — near-black on white, near-white on the dark
+            // card — which is also how every other selection toolbar behaves.
+            className="absolute z-10 whitespace-nowrap rounded-full bg-ink px-3 py-1.5 text-xs font-medium text-surface shadow-md transition-colors duration-150 ease-brand hover:bg-accent"
+          >
+            Where&rsquo;s this from?
+          </button>
+        )}
+      </div>
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
         <span className="font-mono">{payload.model.model}</span>
@@ -49,7 +119,12 @@ export function AnswerCard({
               Retried as: <span className="text-body">{payload.grade.rewrittenAs}</span>
             </p>
           )}
-          <SourceList sources={payload.sources} cited={payload.citations} />
+          {traced && <TraceResult traced={traced} sources={payload.sources} />}
+          <SourceList
+            sources={payload.sources}
+            cited={payload.citations}
+            highlight={traced?.attribution ?? null}
+          />
         </div>
       )}
 
@@ -68,6 +143,50 @@ export function AnswerCard({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * What the highlight-to-trace lookup found, in the reader's terms.
+ *
+ * Three outcomes, worded three ways on purpose. `attribute` can tell a claim
+ * whose wording survived from one that nothing supports, but it cannot tell a
+ * heavy paraphrase from a claim assembled out of two passages — so the middle
+ * case says "closest", names the risk, and lets the reader judge from the marked
+ * passage below. Rendering it identically to a strong match would launder a
+ * guess into a citation.
+ */
+function TraceResult({ traced, sources }: { traced: NonNullable<Traced>; sources: Source[] }) {
+  const { attribution } = traced;
+
+  if (!attribution) {
+    return (
+      <p className="rounded-lg border-[0.5px] border-refusal/40 bg-refusal-tint px-3 py-2 text-xs leading-relaxed text-body">
+        No retrieved passage supports that selection closely enough to point at one. It may be
+        paraphrased across several, or not grounded in these documents at all.
+      </p>
+    );
+  }
+
+  const source = sources.find((candidate) => candidate.n === attribution.n);
+  const where = `source ${attribution.n}${source ? ` · ${source.filename}` : ""}${
+    source?.page ? ` p${source.page}` : ""
+  }`;
+
+  return (
+    <p className="rounded-lg border-[0.5px] border-line bg-surface px-3 py-2 text-xs leading-relaxed text-body">
+      {attribution.confidence === "strong" ? (
+        <>
+          Drawn from <span className="text-accent-on-tint">{where}</span>, marked below.
+        </>
+      ) : (
+        <>
+          Closest supporting passage is <span className="text-accent-on-tint">{where}</span>, marked
+          below — the wording only partly overlaps, so the answer may be paraphrasing it or drawing
+          on more than one passage.
+        </>
+      )}
+    </p>
   );
 }
 
