@@ -1,6 +1,7 @@
 import type { QdrantClient } from "@qdrant/js-client-rest";
 
 import { embedOne, type EmbedOptions } from "./embed";
+import { RAG, withSpan } from "./telemetry";
 import type { RetrievedChunk } from "./types";
 import { search } from "./vector";
 
@@ -67,11 +68,27 @@ export async function retrieve(
   }
 
   const embedStart = Date.now();
-  const vector = await embedOne(request.question, deps.embedding);
+  const vector = await withSpan(
+    "rag.embed_query",
+    { [RAG.embeddingModel]: deps.embedding.model },
+    () => embedOne(request.question, deps.embedding),
+  );
   const embeddingMs = Date.now() - embedStart;
 
   const searchStart = Date.now();
-  const hits = await search(deps.qdrant, vector, request.collectionId, request.topK);
+  const hits = await withSpan(
+    "rag.search",
+    // The collection id is on the span deliberately: it is the isolation
+    // boundary, and a trace that does not record which scope a search ran in
+    // cannot answer the only question that matters after a suspected leak.
+    { [RAG.collectionId]: request.collectionId, [RAG.topK]: request.topK },
+    async (span) => {
+      const results = await search(deps.qdrant, vector, request.collectionId, request.topK);
+      span.setAttribute(RAG.resultCount, results.length);
+      if (results[0]) span.setAttribute(RAG.topScore, results[0].score);
+      return results;
+    },
+  );
   const searchMs = Date.now() - searchStart;
 
   if (hits.length === 0) return { chunks: [], embeddingMs, searchMs };

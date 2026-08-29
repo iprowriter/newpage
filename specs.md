@@ -180,8 +180,25 @@ Each trace: query, collection filter applied, retrieved chunk ids with scores, g
 whether rewrite-retry fired, per-stage latency, token counts, pinned model id, refusal decision
 and reason.
 
-OpenTelemetry spans are emitted alongside. Locally they render in the app; the productionisation
-section points them at Langfuse or Datadog as a config change.
+OpenTelemetry spans are emitted alongside, following the GenAI semantic conventions so a vendor's
+LLM view works without a mapping layer:
+
+```
+rag.query                     collection id, top-k, outcome, rewrite fired, refusal reason
+├─ rag.embed_query            embedding model
+├─ rag.search                 collection id (the isolation boundary), result count, top score
+├─ rag.grade                  top score, result count, branch taken
+└─ gen_ai.chat                gen_ai.system, gen_ai.request.model, input/output tokens
+
+rag.extract                   document id, mime type, page count      (ingest)
+rag.embed_documents           chunk count, embedding model            (ingest)
+```
+
+No exporter is wired and no collector runs in Compose — that would take the stack from six
+services to seven for a demo whose traces already render in-app. With no
+`OTEL_EXPORTER_OTLP_ENDPOINT` the SDK records spans and drops them, so the instrumented path is
+identical in dev, in tests and in production, and shipping to Langfuse, Datadog or Honeycomb is
+one environment variable.
 
 ## 10. Surfaces
 

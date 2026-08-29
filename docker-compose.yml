@@ -91,6 +91,41 @@ services:
       retries: 60
       start_period: 30s
 
+  # A trace viewer, so the OpenTelemetry claim is something a reviewer can click
+  # rather than something the README asserts.
+  #
+  # ADR-0016 rejected Jaeger, and that reasoning was sound for the question it
+  # answered: as a *replacement* for the in-app trace page it is the wrong shape,
+  # showing spans and latency but not prompts, retrieved chunks or grade
+  # decisions. As a *complement* the calculus is different. One container with
+  # in-memory storage, and it turns "this already emits OTel" from an assertion
+  # into a waterfall with gen_ai attributes on it.
+  #
+  # The two views answer different questions and that is the point: /traces is
+  # this system's story, Jaeger is the standard shape any vendor would consume.
+  jaeger:
+    image: jaegertracing/jaeger:2.1.0
+    restart: unless-stopped
+    ports:
+      # The UI. Published on a high port for the same reason as everything else:
+      # a reviewer already running something on 16686 should not get a failed
+      # `docker compose up` out of it.
+      - "127.0.0.1:${JAEGER_UI_PORT:-16686}:16686"
+      # OTLP published too, so a host-side `npm run dev` sends traces to the same
+      # viewer the containerised app uses. Without it, traces only exist in the
+      # Compose path and dev silently emits into nothing.
+      - "127.0.0.1:${JAEGER_OTLP_PORT:-4318}:4318"
+    healthcheck:
+      # wget, not the v1 `all-in-one-linux` binary — Jaeger v2 does not ship it,
+      # and the wrong path fails every check while the service is perfectly fine.
+      # Same class of mistake as the Qdrant /dev/tcp probe: a healthcheck that
+      # cannot pass turns `depends_on` into a hang.
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:16686/"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
   # Migrations as their own step rather than an entrypoint hook, built from the
   # `builder` stage because the Prisma CLI is a devDependency and deliberately
   # absent from the runtime image. Running to completion before `web` starts
@@ -137,6 +172,13 @@ services:
       QDRANT_URL: http://qdrant:6333
       # Ollama runs natively on the host, never in this image (ADR-0003): Docker Desktop
       # on macOS gives containers no GPU, so an in-container model would be CPU-only.
+      # Points at the bundled Jaeger by default, so traces are visible with no
+      # setup. Override to send them anywhere else — that is the whole
+      # integration effort for Langfuse, Datadog or Honeycomb.
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://jaeger:4318}
+      # Read by the browser, so the /traces page can link to the viewer. Uses the
+      # published host port, not the container hostname.
+      NEXT_PUBLIC_TRACE_UI_URL: ${NEXT_PUBLIC_TRACE_UI_URL:-http://localhost:${JAEGER_UI_PORT:-16686}}
       # Generation talks to the host (GPU); embeddings to the container (CPU is fine).
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-http://ollama:11434}
@@ -154,6 +196,8 @@ services:
       qdrant:
         condition: service_healthy
       ollama:
+        condition: service_healthy
+      jaeger:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully

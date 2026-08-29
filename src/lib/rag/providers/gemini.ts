@@ -1,5 +1,6 @@
 import { ProviderError, retryAfterMs } from "./errors";
 import { withRetry } from "./retry";
+import { GEN_AI, withSpan } from "../telemetry";
 import type { GenerateRequest, GenerateResult, Provider } from "./types";
 
 /**
@@ -16,7 +17,23 @@ export function geminiProvider(apiKey: string, model: string): Provider {
       // Transient upstream failures are retried here rather than surfaced: a 503
       // from Gemini means the request never reached the model, so a second
       // attempt costs nothing and usually works.
-      return withRetry(() => call(apiKey, model, request));
+      return withSpan(
+        "gen_ai.chat",
+        {
+          [GEN_AI.system]: "gemini",
+          [GEN_AI.operation]: "chat",
+          [GEN_AI.requestModel]: model,
+          [GEN_AI.temperature]: request.temperature ?? 0.1,
+        },
+        async (span) => {
+          // The span wraps the retry, not each attempt: a caller cares that the
+          // call took 4s and succeeded, and the retries are visible as the gap.
+          const result = await withRetry(() => call(apiKey, model, request));
+          if (result.promptTokens) span.setAttribute(GEN_AI.inputTokens, result.promptTokens);
+          if (result.outputTokens) span.setAttribute(GEN_AI.outputTokens, result.outputTokens);
+          return result;
+        },
+      );
     },
   };
 }

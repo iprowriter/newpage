@@ -1,6 +1,7 @@
 import { getDb } from "@/lib/db";
 import { getEmbeddingModel } from "@/lib/env";
 import { buildAnswerGraph } from "@/lib/rag/graph";
+import { RAG, withSpan } from "@/lib/rag/telemetry";
 import { isProviderError } from "@/lib/rag/providers/errors";
 import { graphDeps, resolveProvider } from "@/lib/rag-runtime";
 
@@ -41,12 +42,25 @@ export async function POST(request: Request) {
 
   try {
     const graph = buildAnswerGraph(graphDeps(provider));
-    const state = await graph.invoke({
-      question,
-      searchQuery: question,
-      collectionId: collection.id,
-      topK: collection.topK,
-    });
+    const state = await withSpan(
+      "rag.query",
+      { [RAG.collectionId]: collection.id, [RAG.topK]: collection.topK },
+      async (span) => {
+        const result = await graph.invoke({
+          question,
+          searchQuery: question,
+          collectionId: collection.id,
+          topK: collection.topK,
+        });
+        span.setAttribute(RAG.outcome, result.outcome ?? "unknown");
+        span.setAttribute(RAG.rewriteFired, result.rewrites > 0);
+        // The refusal reason is on the span, not just in Postgres: a refusal is
+        // a successful outcome, so without it a vendor trace shows a fast, clean
+        // request and no indication the reader got nothing.
+        if (result.refusalReason) span.setAttribute(RAG.refusalReason, result.refusalReason);
+        return result;
+      },
+    );
 
     const latencyMs = Date.now() - started;
 

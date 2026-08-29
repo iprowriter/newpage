@@ -6,6 +6,7 @@ import { embedAll, type EmbedOptions } from "@/lib/rag/embed";
 import { extract } from "@/lib/rag/extract";
 import type { Provider } from "@/lib/rag/providers/types";
 import { generateStarterQuestions } from "@/lib/rag/starter-questions";
+import { RAG, withSpan } from "@/lib/rag/telemetry";
 import { ensureCollection, upsertChunks } from "@/lib/rag/vector";
 
 /**
@@ -62,7 +63,15 @@ export async function ingestDocument(
   });
 
   try {
-    const extracted = await extract(request.data, request.mimeType);
+    const extracted = await withSpan(
+      "rag.extract",
+      { [RAG.documentId]: document.id, "rag.mime_type": request.mimeType },
+      async (span) => {
+        const result = await extract(request.data, request.mimeType);
+        span.setAttribute(RAG.pageCount, result.pageCount ?? 0);
+        return result;
+      },
+    );
 
     const chunks = chunkDocument(extracted, {
       // Per-collection, because a validation protocol and a Q&A document do not
@@ -76,7 +85,11 @@ export async function ingestDocument(
       throw new Error("Extraction produced no chunks. The file may be empty or unreadable.");
     }
 
-    const vectors = await embedAll(chunks.map((c) => c.embedText), deps.embedding);
+    const vectors = await withSpan(
+      "rag.embed_documents",
+      { [RAG.chunkCount]: chunks.length, "rag.embedding.model": deps.embedding.model },
+      () => embedAll(chunks.map((c) => c.embedText), deps.embedding),
+    );
     await ensureCollection(deps.qdrant, vectors[0].length);
 
     const rows = await deps.db.$transaction(

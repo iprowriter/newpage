@@ -1,5 +1,6 @@
 import { ProviderError } from "./errors";
 import { withRetry } from "./retry";
+import { GEN_AI, withSpan } from "../telemetry";
 import type { GenerateRequest, GenerateResult, Provider } from "./types";
 
 /**
@@ -23,7 +24,21 @@ export function ollamaProvider(baseUrl: string, model: string): Provider {
       // always a stopped server or an unpulled model, and neither is fixed by
       // waiting. Two attempts covers the one case that is transient — a model
       // being loaded into memory on first use.
-      return withRetry(() => call(baseUrl, model, request), { attempts: 2 });
+      return withSpan(
+        "gen_ai.chat",
+        {
+          [GEN_AI.system]: "ollama",
+          [GEN_AI.operation]: "chat",
+          [GEN_AI.requestModel]: model,
+          [GEN_AI.temperature]: request.temperature ?? 0.1,
+        },
+        async (span) => {
+          const result = await withRetry(() => call(baseUrl, model, request), { attempts: 2 });
+          if (result.promptTokens) span.setAttribute(GEN_AI.inputTokens, result.promptTokens);
+          if (result.outputTokens) span.setAttribute(GEN_AI.outputTokens, result.outputTokens);
+          return result;
+        },
+      );
     },
   };
 }

@@ -32,6 +32,13 @@ interface Trace {
  * roughly eight. OpenTelemetry is emitted alongside, so pointing this at Langfuse
  * or Datadog in production is configuration rather than instrumentation work.
  */
+/**
+ * Read at build time by Next, so it is baked into the client bundle. Absent when
+ * no viewer is configured, in which case the link simply does not render — the
+ * in-app traces below stand on their own.
+ */
+const TRACE_UI_URL = process.env.NEXT_PUBLIC_TRACE_UI_URL;
+
 export function TracesView() {
   const [traces, setTraces] = useState<Trace[]>([]);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -50,6 +57,29 @@ export function TracesView() {
         Every question, what came back, and what it cost. Refusals included — they are the
         interesting ones.
       </p>
+
+      {/* Two views, deliberately. This page is shaped for *this* system: retrieved
+          chunks, grade decisions, refusal reasons. Jaeger shows the same requests
+          in the standard OpenTelemetry shape, which is what any vendor would
+          consume — and having it running is what makes "already instrumented" a
+          claim a reviewer can check rather than take on trust. */}
+      {TRACE_UI_URL && (
+        <a
+          href={TRACE_UI_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-4 inline-flex items-center gap-2 rounded-full border-[0.5px] border-line bg-surface px-3.5 py-2 text-[13px] text-body shadow-xs hover:border-accent hover:text-ink hover:shadow-sm"
+        >
+          <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden>
+            <path
+              d="M2 10.6h3.1V12H2zM2 6.3h6.5v1.4H2zM2 2h10v1.4H2z"
+              fill="currentColor"
+            />
+          </svg>
+          OpenTelemetry spans in Jaeger
+          <span className="text-muted">↗</span>
+        </a>
+      )}
 
       {traces.length === 0 ? (
         <p className="mt-8 text-sm text-muted">No queries yet.</p>

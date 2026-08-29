@@ -3,6 +3,7 @@ import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 import { ANSWER_SCHEMA, ANSWER_SYSTEM, REWRITE_SYSTEM, buildAnswerPrompt, buildRewritePrompt } from "./prompts";
 import type { Provider } from "./providers/types";
 import { retrieve, type RetrieveDeps } from "./retrieve";
+import { RAG, withSpan } from "./telemetry";
 import type { RetrievedChunk } from "./types";
 
 /**
@@ -101,9 +102,23 @@ export function buildAnswerGraph(deps: GraphDeps) {
     // round-trip to answer a question that a score threshold answers correctly
     // most of the time; the model's own `sufficient` flag in `generate` catches
     // the subtler case that a threshold cannot see.
-    .addNode("grade", async (state) => ({
-      gradeScore: state.chunks[0]?.score,
-    }))
+    // Spanned despite doing no I/O: the grade is where the guardrail decides, and
+    // a trace that shows retrieval and generation but not the branch between them
+    // cannot explain why an answer was refused.
+    .addNode("grade", async (state) => {
+      const gradeScore = state.chunks[0]?.score;
+      return withSpan(
+        "rag.grade",
+        { [RAG.topScore]: gradeScore ?? 0, [RAG.resultCount]: state.chunks.length },
+        async (span) => {
+          // Routed against the score this node is about to set, not the one
+          // still on state — which is undefined here, and would have made every
+          // recorded decision read "rewrite" regardless of the actual branch.
+          span.setAttribute(RAG.gradeDecision, route({ ...state, gradeScore }));
+          return { gradeScore };
+        },
+      );
+    })
 
     .addNode("rewrite", async (state) => {
       const started = Date.now();
