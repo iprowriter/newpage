@@ -125,8 +125,14 @@ function inverseFrequency(term: string, sourceTokens: Set<string>[]): number {
   return Math.log(1 + sourceTokens.length / (documentFrequency + 1));
 }
 
-/** The best-matching window in each passage, strongest first. */
-function rankPassages(selection: string, sources: AttributionSource[]): Attribution[] {
+/**
+ * The best-matching window in each passage, strongest first, *before* the floor
+ * is applied. Exported for `scripts/calibrate-attribution.mts`: a calibration
+ * that could only see scores which already passed the threshold could never tell
+ * a near-miss from a total miss, which is the distinction the thresholds are
+ * being set on.
+ */
+export function rankPassages(selection: string, sources: AttributionSource[]): Attribution[] {
   const selectionTokens = tokenize(selection);
   const terms = [...new Set(selectionTokens)];
   if (terms.length < MIN_SELECTION_TERMS) return [];

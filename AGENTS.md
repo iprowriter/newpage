@@ -44,7 +44,9 @@ npm run seed                       ingest corpus; backfills starter questions
 npm run eval                       full harness
 npm run eval -- --retrieval-only   deterministic half: seconds, free
 npm run eval -- --provider ollama  the local column
-npm test / npm run typecheck       29 tests / tsc
+npm test / npm run typecheck       40 tests / tsc
+npm run calibrate                  retrieval refusal floor, from data
+npm run calibrate:attribution      attribution bands, from data
 ```
 
 Host ports are deliberately high (55432, 56333) so `docker compose up` cannot collide with a

@@ -15,6 +15,8 @@
     "db:studio": "dotenv -e .env.local -- prisma studio",
     "postinstall": "prisma generate",
     "eval": "dotenv -e .env.local -- tsx scripts/eval.mts",
+    "calibrate": "dotenv -e .env.local -- tsx scripts/calibrate.mts",
+    "calibrate:attribution": "dotenv -e .env.local -- tsx scripts/calibrate-attribution.mts",
     "seed": "dotenv -e .env.local -- tsx scripts/seed.mts"
   },
   "dependencies": {

@@ -56,9 +56,16 @@ asking about. Do all of it before touching Tier 2.
 ## Tier 2 — Differentiation, only after Tier 1 is done
 
 Rule for this tier: **each item ships with an eval number attached**, or it's just a feature and
-I can't defend it in the follow-up interview.
+I can't defend it in the follow-up interview. Narrowed once, in the stop rules below, for items
+that cannot move an eval number in the first place.
 
-11. Citation resolves to a highlighted span in a document viewer.
+11. Citation resolves to a highlighted span in a document viewer. **Shipped, in a narrower form
+    than written here** (ADR-0024): highlight a claim in the answer and the supporting passage
+    opens in the provenance panel with the sentence marked, rather than opening a document viewer
+    — the passage text was already on the client, so the viewer would have been new surface for
+    no extra evidence. Lexical matching, so it reports `strong` / `partial` / no-match rather than
+    pretending to a precision it doesn't have. Exempt from the eval rule below, on the reasoning
+    stated there.
 12. Hybrid retrieval (keyword + vector) with before/after eval numbers, including the honest case
     where it didn't help. **Promoted in likelihood by ADR-0010** — Qdrant has native sparse
     vectors and a fusion API, so this is configuration rather than hand-rolled BM25. Realistically
@@ -87,6 +94,15 @@ Goes in "What I'd do differently with more time". The brief explicitly says this
 ## Stop rules
 
 - No Tier 2 work until every Tier 1 item is done.
-- Any Tier 2 item without an eval number gets removed before submission.
+- Any Tier 2 item **that touches retrieval or generation** gets removed before submission unless
+  it ships with an eval number.
+- An item that *provably cannot move* an eval number is exempt: no prompt change, no graph change,
+  nothing added to the answer path. It carries unit tests and a stated limitation in its ADR
+  instead. This is a clarification of the original rule, not a loosening of it — the rule was
+  aimed at unmeasured claims about answer quality, and an item that cannot affect answer quality
+  cannot make one. Applying it literally would cut interface work for failing a measurement that
+  cannot be run on it, which is a worse failure than the one the rule prevents. The burden is on
+  the item: "cannot move an eval number" is a claim the ADR has to make explicitly and defend, and
+  item 11 is the only thing currently claiming it.
 - Feature count is not the differentiator. Option 1 is the option most candidates pick — the
   separation comes from citations, refusal, evals and traces, all of which are Tier 0 and 1.

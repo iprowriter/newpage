@@ -41,21 +41,30 @@ claim came from, and weighting it corpus-wide would let shared boilerplate decid
 No prompt change, no graph change, no extra call, so it cannot move an eval number. That was the
 deciding property, not the cost.
 
-**Three outcomes, because measurement supports three and not two.** On the corpus:
+**Three outcomes, because measurement supports three and not two.**
 
-| | Score | Runner-up margin |
-|---|---|---|
-| Verbatim / lightly reworded | 0.8–1.0 | 0.6–0.8 |
-| Heavy paraphrase | 0.40–0.50 | 0.04–0.28 |
-| Claim assembled from two passages | ~0.42 | ~0.24 |
-| Nothing supports it | 0.0 | — |
+Measured by `npm run calibrate:attribution`, against passages returned by `retrieve()` on the live
+corpus:
+
+| | Score |
+|---|---|
+| Verbatim from the passage | 1.00 |
+| Genuine paraphrase of it | 0.18–0.51 |
+| Claim drawing on two passages | 0.20–0.32 |
+| Nothing supports it | 0.00–0.07 |
+
+**Corrected 2026-08-29.** This table first carried 0.40–0.50 for paraphrase and 0.0 for
+unsupported, measured against the unit-test fixtures. Those numbers were too kind: fixtures written
+while reading the source share its vocabulary, so they scored like near-quotations. The figures
+above come from the calibration script and are the ones the feature actually meets. The decision
+below is unchanged — the correction makes it more conservative, not less.
 
 I built this expecting to detect the third row — "this claim is synthesised, it belongs to no
 single passage" was the property I wanted most, because it is the refusal ethic applied to
-attribution. **It is not detectable this way.** Synthesised claims and honest paraphrases score in
-the same band, and the runner-up margin separates them backwards: 0.24 for synthesis against
-0.04–0.11 for genuine paraphrase. Both a threshold and a dominance test were tried against the
-numbers above and neither holds.
+attribution. **It is not detectable this way.** Synthesis (0.20–0.32) sits inside the range of
+honest paraphrase (0.18–0.51), so no threshold separates them; a runner-up dominance test was tried
+as well and separates them backwards. The calibration script asserts this overlap on every run and
+prints SEPARABLE if it ever stops holding.
 
 So the API reports what the scores can actually distinguish: `strong` above 0.6, `partial` between
 0.35 and 0.6, and null below — where the reader is told no passage supports the selection rather
@@ -77,7 +86,13 @@ passage, so the UI hedges where it did not need to. Sentence-window granularity 
 spanning a sentence boundary highlights up to three sentences. Both are the cost of not putting
 this on the answer path.
 
-**Accepted cost.** The band that matters most — is this claim actually grounded in one passage, or
-is the model assembling? — is the one the method cannot resolve. Semantic matching against the
-existing chunk embeddings is the upgrade path, and per ADR-0015 it should ship with a number
-attached rather than on the assumption that it is better.
+**Accepted cost, and it is larger than first recorded.** Real paraphrase runs 0.18–0.51, so a good
+part of it falls below the 0.35 floor: the feature will decline on claims that genuinely do come
+from one passage. It fails towards silence rather than towards a wrong pointer, which is the right
+direction for this audience, but "highlight anything and it will find the source" is not true and
+should not be claimed in the README or a demo. Verbatim and near-verbatim wording is where it
+works, and that is a large share of a grounded answer's sentences.
+
+The band that matters most — is this claim grounded in one passage, or is the model assembling? —
+remains the one the method cannot resolve. Semantic matching against the existing chunk embeddings
+is the upgrade path, and per ADR-0015 it ships with a number attached or not at all.
