@@ -1,0 +1,90 @@
+# Local stack. Three services, deliberately (ADR-0016): the cold-start experience is the
+# thing a reviewer judges first, and every extra container is another way for it to fail.
+#
+#   docker compose up            # everything, including the app
+#   docker compose up postgres qdrant   # data layer only; run `npm run dev` on the host
+#   docker compose down -v       # stop and wipe data
+#
+# Pinned project name: Compose otherwise derives it from the directory, so a rename would
+# silently fork a second stack with empty volumes.
+name: newpage
+
+services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: newpage
+      POSTGRES_PASSWORD: newpage
+      POSTGRES_DB: newpage
+    ports:
+      # High default on purpose. These ports exist only so a host-side `npm run
+      # dev` can reach the data layer; the app inside compose uses the internal
+      # network and does not need them at all. Defaulting to 5432 means
+      # `docker compose up` dies on any machine already running Postgres — a
+      # cold-start failure caused entirely by a convenience nobody asked for.
+      - "127.0.0.1:${POSTGRES_PORT:-55432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U newpage -d newpage"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  qdrant:
+    # Pinned, and kept in step with @qdrant/js-client-rest in package.json: the
+    # client refuses a server more than one minor version away, so an unpinned
+    # image would break the app on a dependency bump nobody connected to it.
+    image: qdrant/qdrant:v1.19.0
+    restart: unless-stopped
+    ports:
+      # Same reasoning as Postgres above.
+      - "127.0.0.1:${QDRANT_PORT:-56333}:6333"
+    volumes:
+      - qdrantdata:/qdrant/storage
+    healthcheck:
+      # The image ships no curl or wget, so the probe opens the port itself.
+      # Must be CMD + explicit bash, never CMD-SHELL: compose runs CMD-SHELL
+      # through /bin/sh, which is dash here, and /dev/tcp is a *bash* builtin.
+      # Written the wrong way it fails every single time while Qdrant is
+      # perfectly healthy — and because `web` waits on service_healthy, that
+      # turns `docker compose up` into a hang with no error to read.
+      test:
+        [
+          "CMD",
+          "bash",
+          "-c",
+          "exec 3<>/dev/tcp/127.0.0.1/6333 && printf 'GET /readyz HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 && head -1 <&3 | grep -q '200 OK'",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${WEB_PORT:-3000}:3000"
+    environment:
+      DATABASE_URL: postgresql://newpage:newpage@postgres:5432/newpage
+      QDRANT_URL: http://qdrant:6333
+      # Ollama runs natively on the host, never in this image (ADR-0003): Docker Desktop
+      # on macOS gives containers no GPU, so an in-container model would be CPU-only.
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      LLM_PROVIDER: ${LLM_PROVIDER:-gemini}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.6-flash}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  qdrantdata:

@@ -1,0 +1,128 @@
+@import "tailwindcss";
+
+/* ============================================================================
+   Design tokens (ADR-0021)
+   ----------------------------------------------------------------------------
+   Everything themeable is a semantic CSS variable, so components never hardcode
+   a hex — that is what breaks dark mode. Light is `:root`; dark applies only
+   under an explicit `data-theme="dark"` on <html>. `prefers-color-scheme` is
+   deliberately not consulted, so the toggle is the single source of truth and a
+   dark-OS reviewer still lands on light first and sees the toggle work.
+
+   `@theme inline` maps each token onto a Tailwind utility (bg-surface, text-ink,
+   border-line). Inline matters: it references the live var rather than copying
+   the value, so utilities flip at runtime.
+   ========================================================================== */
+
+:root {
+  --accent: #6e56cf;
+  --accent-strong: #5a48c0;
+  --accent-tint: #eeeafb;
+  --accent-on-tint: #4a3ca6;
+
+  --ink: #18161f;
+  --body: #5b5670;
+  --muted: #8b87a0;
+
+  --page: #f4f2fa;
+  --surface: #ffffff;
+  --surface-soft: #f7f6fb;
+  --line: #eceaf2;
+
+  --success: #2f7d5b;
+  --warn: #a96e14;
+  --danger: #c0392f;
+
+  /* A refusal is correct behaviour, not an error, so it reads as caution and
+     never as failure (ADR-0021). Colouring it red would teach the reviewer the
+     opposite of the point the system is making. */
+  --refusal: var(--warn);
+  --refusal-tint: #fdf4e3;
+
+  /* Retrieval score bars in the provenance panel. */
+  --score-high: #2f7d5b;
+  --score-low: #a96e14;
+
+  /* Citation markers and their highlighted spans. */
+  --citation: var(--accent);
+  --citation-tint: var(--accent-tint);
+}
+
+:root[data-theme="dark"] {
+  --accent: #8b78e8;
+  --accent-strong: #7c6bef;
+  --accent-tint: rgba(139, 120, 232, 0.16);
+  --accent-on-tint: #c9bef7;
+
+  --ink: #eceaf2;
+  --body: #b4afc4;
+  --muted: #85819a;
+
+  --page: #16141c;
+  --surface: #201d28;
+  --surface-soft: #1b1823;
+  --line: #2e2a38;
+
+  --success: #63c793;
+  --warn: #e0a44a;
+  --danger: #f0857a;
+
+  --refusal: var(--warn);
+  --refusal-tint: rgba(224, 164, 74, 0.14);
+
+  --score-high: #63c793;
+  --score-low: #e0a44a;
+
+  --citation: var(--accent);
+  --citation-tint: var(--accent-tint);
+}
+
+@theme inline {
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-tint: var(--accent-tint);
+  --color-accent-on-tint: var(--accent-on-tint);
+  --color-ink: var(--ink);
+  --color-body: var(--body);
+  --color-muted: var(--muted);
+  --color-page: var(--page);
+  --color-surface: var(--surface);
+  --color-surface-soft: var(--surface-soft);
+  --color-line: var(--line);
+  --color-success: var(--success);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+  --color-refusal: var(--refusal);
+  --color-refusal-tint: var(--refusal-tint);
+  --color-score-high: var(--score-high);
+  --color-score-low: var(--score-low);
+  --color-citation: var(--citation);
+  --color-citation-tint: var(--citation-tint);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--page);
+  color: var(--ink);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Functional focus ring in the accent, for keyboard users only. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
