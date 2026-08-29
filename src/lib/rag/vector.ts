@@ -128,6 +128,14 @@ export async function reassignCollection(
   });
 }
 
+/** Removes every chunk of a collection. Same ordering rationale as deleteByDocument. */
+export async function deleteByCollection(client: QdrantClient, collectionId: string): Promise<void> {
+  await client.delete(COLLECTION, {
+    wait: true,
+    filter: { must: [{ key: "collectionId", match: { value: collectionId } }] },
+  });
+}
+
 export interface ScoredChunkId {
   chunkId: string;
   score: number;

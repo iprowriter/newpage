@@ -1,6 +1,7 @@
 import { getDb } from "@/lib/db";
 import { getEmbeddingModel } from "@/lib/env";
 import { buildAnswerGraph } from "@/lib/rag/graph";
+import { isProviderError } from "@/lib/rag/providers/errors";
 import { graphDeps, resolveProvider } from "@/lib/rag-runtime";
 
 /**
@@ -105,13 +106,20 @@ export async function POST(request: Request) {
       model: { provider: provider.id, model: provider.model, embeddingModel: getEmbeddingModel() },
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "The query failed.";
+    // Two audiences, two messages. The trace keeps the diagnostic text — status
+    // codes, upstream detail — because that is what makes a failure debuggable
+    // later. The response carries the human sentence and, crucially, whether
+    // retrying is worth the reader's time.
+    const provided = isProviderError(error);
+    const diagnostic = error instanceof Error ? error.message : String(error);
+    const userMessage = provided ? error.userMessage : "The query failed unexpectedly.";
+
     await db.queryTrace.create({
       data: {
         collectionId: collection.id,
         question,
         outcome: "error",
-        refusalReason: message,
+        refusalReason: diagnostic,
         retrieved: [],
         provider: provider.id,
         model: provider.model,
@@ -119,6 +127,17 @@ export async function POST(request: Request) {
         latencyMs: Date.now() - started,
       },
     });
-    return Response.json({ error: message }, { status: 502 });
+
+    return Response.json(
+      {
+        error: userMessage,
+        kind: provided ? error.kind : "unknown",
+        retryable: provided ? error.retryable : false,
+        provider: provider.id,
+      },
+      // 503 when upstream is the thing that is down, so the status says who
+      // failed rather than blaming the caller for a busy model.
+      { status: provided && error.kind === "unavailable" ? 503 : 502 },
+    );
   }
 }

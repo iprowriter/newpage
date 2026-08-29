@@ -11,9 +11,11 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { createClient } from "@/lib/rag/vector";
+import { generateStarterQuestions } from "@/lib/rag/starter-questions";
 import { getDb } from "@/lib/db";
 import { getEmbeddingModel, getOllamaBaseUrl, getQdrantUrl } from "@/lib/env";
 import { ingestDocument } from "@/lib/ingest";
+import { resolveProvider } from "@/lib/rag-runtime";
 
 /**
  * No "Quick start" collection any more. It existed so there was somewhere to drop
@@ -38,6 +40,20 @@ const COLLECTIONS = [
 const db = getDb();
 const qdrant = createClient(getQdrantUrl());
 const embedding = { baseUrl: getOllamaBaseUrl(), model: getEmbeddingModel() };
+
+/**
+ * Starter questions need a generation provider, and the seed previously did not
+ * pass one — so every seeded document skipped the step silently, and the
+ * flagship collections opened with no suggestions while anything uploaded
+ * through the UI had three. Optional, so seeding still works with no API key;
+ * the documents just ingest without suggestions.
+ */
+let provider;
+try {
+  provider = resolveProvider();
+} catch {
+  console.log("No generation provider configured — ingesting without starter questions.\n");
+}
 
 for (const spec of COLLECTIONS) {
   // Find-or-create rather than upsert: `name` is no longer unique (chats collide
@@ -64,6 +80,28 @@ for (const spec of COLLECTIONS) {
       where: { collectionId: collection.id, filename, status: "ready" },
     });
     if (existing) {
+      // Backfill rather than plain skip: a document indexed before starter
+      // questions existed is otherwise stuck without them forever, since it is
+      // never re-ingested. Makes `npm run seed` self-healing instead of merely
+      // idempotent.
+      if (existing.starterQuestions.length === 0 && provider) {
+        const chunks = await db.chunk.findMany({
+          where: { documentId: existing.id },
+          orderBy: { chunkIndex: "asc" },
+          select: { headingPath: true, displayText: true },
+        });
+        const questions = await generateStarterQuestions(
+          filename.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " "),
+          chunks,
+          provider,
+        ).catch(() => []);
+
+        if (questions.length > 0) {
+          await db.document.update({ where: { id: existing.id }, data: { starterQuestions: questions } });
+          console.log(`  fill   ${filename}  ${questions.length} starter questions`);
+          continue;
+        }
+      }
       console.log(`  skip   ${filename}`);
       continue;
     }
@@ -77,7 +115,7 @@ for (const spec of COLLECTIONS) {
           mimeType: "application/pdf",
           data: new Uint8Array(await readFile(join(dir, filename))),
         },
-        { db, qdrant, embedding },
+        { db, qdrant, embedding, provider },
       );
       const seconds = ((Date.now() - started) / 1000).toFixed(1);
       console.log(`  ok     ${filename}  ${result.chunkCount} chunks, ${result.pageCount} pages, ${seconds}s`);

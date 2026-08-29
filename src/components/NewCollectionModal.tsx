@@ -95,7 +95,7 @@ export function NewCollectionModal({
         role="dialog"
         aria-modal="true"
         aria-label="New collection"
-        className="w-full max-w-md rounded-2xl border-[0.5px] border-line bg-surface p-5 shadow-lg"
+        className="w-full max-w-md rounded-2xl border-[0.5px] border-line bg-surface p-5 shadow-md"
       >
         <h2 className="text-[17px] font-medium text-ink">New collection</h2>
         <p className="mt-1 text-[13px] leading-relaxed text-body">

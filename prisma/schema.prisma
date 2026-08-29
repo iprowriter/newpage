@@ -54,6 +54,16 @@ model Collection {
   /// Retained only so the landing route has something to prefer.
   isDefault Boolean @default(false)
 
+  /// An orientation blurb for someone opening a collection they did not build.
+  /// Generated on demand rather than at ingest, because it describes the whole
+  /// set and every new document changes the answer.
+  summary String?
+
+  /// Hash of the member document ids. Compared before serving the cached summary —
+  /// a count alone would miss a swap (one document out, one in), and silently
+  /// describing a collection that no longer exists is worse than regenerating.
+  summaryFingerprint String?
+
   documents Document[]
   chunks    Chunk[]
   traces    QueryTrace[]
@@ -142,6 +152,11 @@ model Chunk {
   @@index([collectionId])
 }
 
+enum Feedback {
+  up
+  down
+}
+
 enum QueryOutcome {
   answered
   /// Not an error state. A first-class path, and the headline metric for this
@@ -182,6 +197,18 @@ model QueryTrace {
   model          String
   embeddingModel String
 
+  /// Human judgement on this answer.
+  ///
+  /// Not a satisfaction score. Retrieval scores and groundedness checks measure
+  /// whether an answer was *supported*; only a reader knows whether it was
+  /// *useful*, and the gap between those two is where prompt drift hides. Every
+  /// rating is a labelled example, so this table becomes the seed of an eval set
+  /// drawn from questions people actually asked rather than ones I invented
+  /// (ADR-0015).
+  feedback     Feedback?
+  feedbackNote String?
+  feedbackAt   DateTime?
+
   latencyMs    Int
   retrievalMs  Int?
   generationMs Int?
@@ -191,6 +218,8 @@ model QueryTrace {
   createdAt DateTime @default(now())
 
   @@index([collectionId, createdAt])
+  /// The eval-set query: every rated answer, worst first.
+  @@index([feedback, createdAt])
 }
 
 /// Eval harness output (ADR-0015). Persisted so "350 vs 800 tokens" and

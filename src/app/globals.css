@@ -46,6 +46,20 @@
   /* Citation markers and their highlighted spans. */
   --citation: var(--accent);
   --citation-tint: var(--accent-tint);
+
+  /* Elevation. Two-layer shadows — a tight contact shadow plus a wider ambient
+     one — because a single blurred box reads as a smudge at small sizes. Values
+     are tuned per theme rather than shared: a dark surface needs a darker, not a
+     lighter, shadow, and reusing light-mode values there makes cards look like
+     they are floating in fog. */
+  --shadow-xs: 0 1px 2px rgba(24, 22, 31, 0.04);
+  --shadow-sm: 0 1px 2px rgba(24, 22, 31, 0.05), 0 2px 6px rgba(24, 22, 31, 0.04);
+  --shadow-md: 0 2px 4px rgba(24, 22, 31, 0.05), 0 8px 24px rgba(24, 22, 31, 0.08);
+  --shadow-accent: 0 2px 12px rgba(110, 86, 207, 0.18);
+
+  /* One easing curve everywhere, so unrelated things moving at once still feel
+     like one interface rather than several. */
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 :root[data-theme="dark"] {
@@ -75,6 +89,11 @@
 
   --citation: var(--accent);
   --citation-tint: var(--accent-tint);
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.24);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 2px 6px rgba(0, 0, 0, 0.22);
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.32), 0 8px 24px rgba(0, 0, 0, 0.36);
+  --shadow-accent: 0 2px 14px rgba(139, 120, 232, 0.22);
 }
 
 @theme inline {
@@ -101,20 +120,130 @@
 
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  --shadow-xs: var(--shadow-xs);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-accent: var(--shadow-accent);
+
+  --ease-brand: var(--ease);
 }
 
 body {
   background: var(--page);
   color: var(--ink);
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  /* Grayscale smoothing on both engines. Without the Firefox/macOS half, text
+     renders visibly heavier there than it does in Chrome. */
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Contextual alternates on, discretionary ligatures off: the first improves
+     letter fitting, the second inserts flourishes nobody asked for.
+     Deliberately not `text-rendering: optimizeLegibility` — its useful effect is
+     enabling kerning and ligatures, which this line already does explicitly, and
+     it carries a layout cost on long text for nothing extra. */
+  font-variant-ligatures: common-ligatures contextual;
+}
+
+/* Optical sizing. Large text set at body tracking looks loose, and small text at
+   heading tracking looks cramped — the correction is opposite at each end, so it
+   cannot be one global value. */
+h1,
+h2 {
+  letter-spacing: -0.021em;
+}
+
+h3,
+h4 {
+  letter-spacing: -0.013em;
+}
+
+/* Numbers that change in place — scores, latencies, token counts — set in
+   proportional figures shift their neighbours every time a digit changes, and
+   the whole row twitches. Tabular figures hold the column still. This is most of
+   the difference between a readout that feels engineered and one that feels
+   thrown together. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* Skeleton shimmer for content being generated.
+   A sweeping highlight rather than a pulsing block: a pulse says "busy", a sweep
+   says "something is arriving", and the second is true here. Reduced-motion
+   users get the flat surface, which is handled by the global rule at the bottom
+   of this file. */
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--surface-soft);
+}
+
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, var(--line), transparent);
+  animation: shimmer 1.6s var(--ease) infinite;
+}
+
+/* Scroll panes inside the app chrome hide their bar.
+   The content still scrolls by wheel, trackpad, keyboard and touch — only the
+   painted bar is suppressed, and only on containers that are visibly scrollable
+   from their own layout. The page itself never uses this: hiding the scrollbar
+   on a document you cannot otherwise tell is scrollable removes an affordance
+   rather than a decoration. */
+.scroll-quiet {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.scroll-quiet::-webkit-scrollbar {
+  display: none;
 }
 
 /* Functional focus ring in the accent, for keyboard users only. */
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-  border-radius: 4px;
+  border-radius: 6px;
+}
+
+/* Opts an element out of the ring above, for controls whose *wrapper* draws the
+   focus treatment instead — the composer being the case that matters.
+ *
+ * This has to live here rather than as a Tailwind `focus-visible:outline-none`
+ * utility. Tailwind v4 emits utilities inside `@layer utilities`, and the rule
+ * above is unlayered; unlayered styles win over layered ones no matter how
+ * specific the layered one is. So the utility was being applied and silently
+ * losing, which looked like it had no effect at all. */
+.focus-ring-off:focus-visible {
+  outline: none;
+}
+
+/* Pressed state for anything clickable. A 1% scale is below conscious notice and
+   is exactly what makes a control feel physical rather than painted on. */
+button:not(:disabled):active,
+a:active {
+  transform: scale(0.985);
+}
+
+button,
+a {
+  transition:
+    background-color 140ms var(--ease),
+    border-color 140ms var(--ease),
+    color 140ms var(--ease),
+    box-shadow 140ms var(--ease),
+    opacity 140ms var(--ease),
+    transform 90ms var(--ease);
 }
 
 @media (prefers-reduced-motion: reduce) {

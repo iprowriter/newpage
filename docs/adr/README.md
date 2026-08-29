@@ -31,5 +31,6 @@ keeps the reasoning mine rather than something backfilled by a model.
 | [0019](0019-ui-shape-and-flow.md) | UI: one page type, grounded suggestions, refusal as a designed surface | Accepted |
 | [0020](0020-no-auth-session-derived-scope-in-production.md) | No auth; production scope comes from the session | Accepted |
 | [0021](0021-design-system.md) | Design system: PracticeDepth tokens, violet accent | Accepted |
+| [0022](0022-chats-are-collections.md) | A chat is a collection with a different kind | Accepted |
 
 Use [`TEMPLATE.md`](TEMPLATE.md) for new ones.

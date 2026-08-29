@@ -3,10 +3,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AnswerCard } from "./AnswerCard";
+import { ChatInput } from "./ChatInput";
+import { CollectionSummary } from "./CollectionSummary";
+import { collectionsChanged } from "./collectionsBus";
 import { DocumentList } from "./DocumentList";
+import { FailureCard } from "./FailureCard";
 import { PromoteChat } from "./PromoteChat";
+import { ScrollAffordance } from "./ScrollAffordance";
 import { SegmentedTabs } from "./SegmentedTabs";
-import type { DocumentSummary, Exchange } from "./types";
+import { Thinking } from "./Thinking";
+import type { DocumentSummary, Exchange, QueryFailure } from "./types";
 import { useProvider } from "./useProvider";
 
 type Tab = "ask" | "sources";
@@ -31,6 +37,7 @@ export function CollectionView({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const { provider } = useProvider();
   const endRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     const response = await fetch(`/api/collections/${collectionId}`);
@@ -38,6 +45,16 @@ export function CollectionView({
     const data = (await response.json()) as { documents: DocumentSummary[] };
     setDocuments(data.documents);
   }, [collectionId]);
+
+  /**
+   * Reload this view *and* tell the sidebar to re-read. Ingestion renames a chat
+   * and changes its counts, and without the second half the sidebar sat on stale
+   * "New chat · Empty" until the next navigation.
+   */
+  const loadAll = useCallback(async () => {
+    await load();
+    collectionsChanged();
+  }, [load]);
 
   useEffect(() => {
     setExchanges([]);
@@ -89,12 +106,20 @@ export function CollectionView({
         body: JSON.stringify({ collectionId, question: trimmed, provider }),
       });
       const data = await response.json();
+      const failure: QueryFailure | undefined = response.ok
+        ? undefined
+        : {
+            message: data.error ?? "The query failed.",
+            kind: data.kind ?? "unknown",
+            retryable: data.retryable ?? false,
+            provider: data.provider ?? provider,
+          };
       setExchanges((current) =>
         current.map((exchange, i) =>
           i === current.length - 1
-            ? response.ok
-              ? { ...exchange, payload: data }
-              : { ...exchange, error: data.error ?? "The query failed." }
+            ? failure
+              ? { ...exchange, failure }
+              : { ...exchange, payload: data }
             : exchange,
         ),
       );
@@ -102,7 +127,18 @@ export function CollectionView({
       setExchanges((current) =>
         current.map((exchange, i) =>
           i === current.length - 1
-            ? { ...exchange, error: error instanceof Error ? error.message : "The query failed." }
+            ? {
+                ...exchange,
+                failure: {
+                  message:
+                    error instanceof Error
+                      ? `The request did not complete: ${error.message}`
+                      : "The request did not complete.",
+                  kind: "network",
+                  retryable: true,
+                  provider,
+                },
+              }
             : exchange,
         ),
       );
@@ -130,7 +166,7 @@ export function CollectionView({
         }
       } finally {
         setUploading(null);
-        await load();
+        await loadAll();
       }
     }
   };
@@ -149,7 +185,7 @@ export function CollectionView({
             {description && <p className="mt-1 text-sm leading-relaxed text-body">{description}</p>}
           </div>
           {kind === "chat" && (
-            <PromoteChat chatId={collectionId} documentCount={documents.length} onMoved={load} />
+            <PromoteChat chatId={collectionId} documentCount={documents.length} onMoved={loadAll} />
           )}
         </div>
         <div className="mt-4">
@@ -165,12 +201,12 @@ export function CollectionView({
       </header>
 
       {tab === "sources" ? (
-        <div className="min-h-0 flex-1 overflow-y-auto pb-8">
-          <DocumentList documents={documents} onDeleted={load} />
+        <div className="scroll-quiet min-h-0 flex-1 overflow-y-auto pb-8">
+          <DocumentList documents={documents} onDeleted={loadAll} />
         </div>
       ) : (
         <>
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <div ref={scrollRef} className="scroll-quiet min-h-0 flex-1 overflow-y-auto">
             <div className="flex flex-col gap-6 pb-6">
               <div className="flex flex-col gap-2">
                 <UploadZone uploading={uploading} onFiles={upload} />
@@ -183,7 +219,11 @@ export function CollectionView({
 
               {exchanges.length === 0 && ready.length > 0 && (
                 <div>
-                  <p className="text-[15px] text-ink">What do you want to know?</p>
+                  {/* Offered before the questions, because orientation comes
+                      before interrogation for someone who did not build this. */}
+                  <CollectionSummary collectionId={collectionId} kind={kind} />
+
+                  <p className="mt-6 text-[15px] text-ink">What do you want to know?</p>
                   {starters.length > 0 && (
                     <div className="mt-3 flex flex-col items-start gap-2">
                       {starters.map((starter) => (
@@ -206,14 +246,19 @@ export function CollectionView({
                   <p className="text-[15px] font-medium text-ink">{exchange.question}</p>
                   {exchange.payload ? (
                     <AnswerCard payload={exchange.payload} onFollowUp={ask} />
-                  ) : exchange.error ? (
-                    <p className="rounded-xl border-[0.5px] border-danger/40 bg-surface p-3 text-[13px] text-danger">
-                      {exchange.error}
-                    </p>
+                  ) : exchange.failure ? (
+                    <FailureCard
+                      failure={exchange.failure}
+                      onRetry={() => {
+                        // Drop the failed exchange and ask again, so a retry
+                        // replaces the failure rather than stacking a second
+                        // copy of the same question beneath it.
+                        setExchanges((current) => current.slice(0, index));
+                        void ask(exchange.question);
+                      }}
+                    />
                   ) : (
-                    <p className="text-sm text-muted">
-                      {provider === "ollama" ? "Thinking locally, this takes a while…" : "Thinking…"}
-                    </p>
+                    <Thinking local={provider === "ollama"} />
                   )}
                 </div>
               ))}
@@ -221,30 +266,17 @@ export function CollectionView({
             </div>
           </div>
 
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              void ask(question);
-            }}
-            className="shrink-0 border-t-[0.5px] border-line bg-page py-4"
-          >
-            <div className="flex items-center gap-2 rounded-xl border-[0.5px] border-line bg-surface px-3 py-2">
-              <input
-                value={question}
-                onChange={(event) => setQuestion(event.target.value)}
-                placeholder={ready.length ? `Ask about ${name}…` : "Add a document to get started"}
-                disabled={asking || ready.length === 0}
-                className="min-w-0 flex-1 bg-transparent text-[15px] text-ink outline-none placeholder:text-muted disabled:cursor-not-allowed"
-              />
-              <button
-                type="submit"
-                disabled={asking || !question.trim()}
-                className="shrink-0 rounded-lg bg-accent px-3.5 py-1.5 text-[13px] text-white transition-colors hover:bg-accent-strong disabled:opacity-40"
-              >
-                {asking ? "Asking…" : "Ask"}
-              </button>
-            </div>
-          </form>
+          <div className="shrink-0 border-t-[0.5px] border-line bg-page py-4">
+            <ScrollAffordance scrollRef={scrollRef} />
+            <ChatInput
+              value={question}
+              onChange={setQuestion}
+              onSubmit={() => void ask(question)}
+              disabled={asking || ready.length === 0}
+              busy={asking}
+              placeholder={ready.length ? `Ask about ${name}…` : "Add a document to get started"}
+            />
+          </div>
         </>
       )}
     </div>

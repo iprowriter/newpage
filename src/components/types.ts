@@ -33,8 +33,22 @@ export interface AnswerPayload {
   model: { provider: string; model: string; embeddingModel: string };
 }
 
+export interface QueryFailure {
+  message: string;
+  kind:
+    | "unavailable"
+    | "rate_limited"
+    | "auth"
+    | "model_retired"
+    | "model_missing"
+    | "network"
+    | "unknown";
+  retryable: boolean;
+  provider: string;
+}
+
 export interface Exchange {
   question: string;
   payload?: AnswerPayload;
-  error?: string;
+  failure?: QueryFailure;
 }

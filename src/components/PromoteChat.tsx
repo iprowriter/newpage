@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { collectionsChanged } from "./collectionsBus";
+
 interface Target {
   id: string;
   name: string;
@@ -55,6 +57,11 @@ export function PromoteChat({
         return;
       }
       onMoved();
+      // The chat row is gone from the database; tell the sidebar so it stops
+      // showing it. Navigation alone would refresh it a moment later, but the
+      // moved-from entry lingering for that moment is exactly the residue this
+      // is meant to avoid.
+      collectionsChanged();
       router.push(`/c/${collectionId}`);
     } finally {
       setBusy(false);
@@ -76,7 +83,7 @@ export function PromoteChat({
       </button>
 
       {open && (
-        <div className="absolute right-0 z-20 mt-1.5 w-60 rounded-xl border-[0.5px] border-line bg-surface p-1 shadow-lg">
+        <div className="absolute right-0 z-20 mt-1.5 w-60 rounded-xl border-[0.5px] border-line bg-surface p-1 shadow-md">
           {targets.length === 0 ? (
             <p className="px-3 py-2 text-xs text-muted">No collections to move into yet.</p>
           ) : (

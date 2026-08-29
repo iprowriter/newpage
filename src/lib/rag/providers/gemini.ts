@@ -1,3 +1,5 @@
+import { ProviderError, retryAfterMs } from "./errors";
+import { withRetry } from "./retry";
 import type { GenerateRequest, GenerateResult, Provider } from "./types";
 
 /**
@@ -10,64 +12,138 @@ export function geminiProvider(apiKey: string, model: string): Provider {
   return {
     id: "gemini",
     model,
-    async generate(request: GenerateRequest): Promise<GenerateResult> {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
-          body: JSON.stringify({
-            systemInstruction: { parts: [{ text: request.system }] },
-            contents: [{ role: "user", parts: [{ text: request.user }] }],
-            generationConfig: {
-              temperature: request.temperature ?? 0.1,
-              ...(request.schema
-                ? { responseMimeType: "application/json", responseSchema: toGeminiSchema(request.schema) }
-                : {}),
-            },
-          }),
-        },
-      );
-
-      if (!response.ok) {
-        const detail = await response.text().catch(() => "");
-        if (response.status === 429) {
-          // Distinguished because the free tier's rate limit is the single most
-          // likely thing a reviewer hits, and a generic 4xx reads as "broken".
-          throw new Error(`Gemini rate limit reached (429). The free tier throttles; wait and retry. ${detail.slice(0, 160)}`);
-        }
-        if (response.status === 404 && detail.includes("no longer available")) {
-          // Found the hard way: a pinned model can be withdrawn *for new API keys
-          // only*, and `models.list` still returns it — so the model appears
-          // available right up until the first generateContent call. Pinning is
-          // still correct (ADR-0014); what it needs is a failure that names the
-          // replacement instead of a bare 404 on a reviewer's first run.
-          const suggested = /use models\/([\w.-]+)/.exec(detail)?.[1];
-          throw new Error(
-            `Gemini model "${model}" has been retired for new API keys. ` +
-              `Set GEMINI_MODEL${suggested ? ` to "${suggested}"` : " to a current model"} in .env.local.`,
-          );
-        }
-        throw new Error(`Gemini request failed (${response.status}): ${detail.slice(0, 240)}`);
-      }
-
-      const body = (await response.json()) as GeminiResponse;
-      // Thinking models return their reasoning as parts flagged `thought`. Those
-      // are excluded: including them would put chain-of-thought into the answer
-      // and, worse, break JSON parsing of structured output.
-      const text =
-        body.candidates?.[0]?.content?.parts
-          ?.filter((part) => !part.thought)
-          .map((part) => part.text ?? "")
-          .join("") ?? "";
-
-      return {
-        text,
-        promptTokens: body.usageMetadata?.promptTokenCount,
-        outputTokens: body.usageMetadata?.candidatesTokenCount,
-      };
+    generate(request: GenerateRequest): Promise<GenerateResult> {
+      // Transient upstream failures are retried here rather than surfaced: a 503
+      // from Gemini means the request never reached the model, so a second
+      // attempt costs nothing and usually works.
+      return withRetry(() => call(apiKey, model, request));
     },
   };
+}
+
+async function call(
+  apiKey: string,
+  model: string,
+  request: GenerateRequest,
+): Promise<GenerateResult> {
+  let response: Response;
+  try {
+    response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: request.system }] },
+          contents: [{ role: "user", parts: [{ text: request.user }] }],
+          generationConfig: {
+            temperature: request.temperature ?? 0.1,
+            ...(request.schema
+              ? { responseMimeType: "application/json", responseSchema: toGeminiSchema(request.schema) }
+              : {}),
+          },
+        }),
+      },
+    );
+  } catch (cause) {
+    throw new ProviderError({
+      kind: "network",
+      message: `Could not reach Gemini: ${cause instanceof Error ? cause.message : cause}`,
+      userMessage: "Could not reach Gemini. Check your connection and try again.",
+      retryable: true,
+    });
+  }
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw classify(response, detail, model);
+  }
+
+  const body = (await response.json()) as GeminiResponse;
+  // Thinking models return their reasoning as parts flagged `thought`. Those are
+  // excluded: including them would put chain-of-thought into the answer and,
+  // worse, break JSON parsing of structured output.
+  const text =
+    body.candidates?.[0]?.content?.parts
+      ?.filter((part) => !part.thought)
+      .map((part) => part.text ?? "")
+      .join("") ?? "";
+
+  return {
+    text,
+    promptTokens: body.usageMetadata?.promptTokenCount,
+    outputTokens: body.usageMetadata?.candidatesTokenCount,
+  };
+}
+
+function classify(response: Response, detail: string, model: string): ProviderError {
+  const status = response.status;
+
+  if (status === 503 || status === 500 || status === 502 || status === 504) {
+    return new ProviderError({
+      kind: "unavailable",
+      message: `Gemini is unavailable (${status}): ${detail.slice(0, 200)}`,
+      userMessage:
+        "Gemini is briefly overloaded. This usually clears in a few seconds — try again, or switch to local inference.",
+      status,
+      retryable: true,
+      retryAfterMs: retryAfterMs(response.headers),
+    });
+  }
+
+  if (status === 429) {
+    return new ProviderError({
+      kind: "rate_limited",
+      message: `Gemini rate limit (429): ${detail.slice(0, 200)}`,
+      userMessage:
+        "The Gemini free tier is rate limiting this key. Wait a moment and retry, or switch to local inference.",
+      status,
+      retryable: true,
+      retryAfterMs: retryAfterMs(response.headers),
+    });
+  }
+
+  // 400 is included on purpose. Google answers an invalid API key with
+  // 400 INVALID_ARGUMENT rather than 401, so keying only on 401/403 sends the
+  // single most likely setup failure — a mistyped key — down the "unexpected
+  // error" path, where the message tells a reviewer nothing they can act on.
+  const badKey = /API[_ ]KEY[_ ]INVALID|API key not valid/i.test(detail);
+  if (status === 401 || status === 403 || (status === 400 && badKey)) {
+    return new ProviderError({
+      kind: "auth",
+      message: `Gemini rejected the key (${status}): ${detail.slice(0, 200)}`,
+      userMessage:
+        "Gemini rejected the API key. Check GEMINI_API_KEY in .env.local — a free key takes a " +
+        "minute at aistudio.google.com/apikey.",
+      status,
+      retryable: false,
+    });
+  }
+
+  if (status === 404 && detail.includes("no longer available")) {
+    // Found the hard way: a pinned model can be withdrawn *for new API keys
+    // only*, and `models.list` still returns it — so the model looks available
+    // right up until the first generateContent call. Pinning is still correct
+    // (ADR-0014); what it needs is a failure that names the replacement.
+    const suggested = /use models\/([\w.-]+)/.exec(detail)?.[1];
+    return new ProviderError({
+      kind: "model_retired",
+      message: `Gemini model "${model}" retired for new keys.`,
+      userMessage:
+        `The pinned model "${model}" has been retired for new API keys. ` +
+        `Set GEMINI_MODEL${suggested ? ` to "${suggested}"` : " to a current model"} in .env.local.`,
+      status,
+      retryable: false,
+    });
+  }
+
+  return new ProviderError({
+    kind: "unknown",
+    message: `Gemini request failed (${status}): ${detail.slice(0, 240)}`,
+    userMessage: `Gemini returned an unexpected error (${status}).`,
+    status,
+    retryable: false,
+  });
 }
 
 interface GeminiResponse {

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { AnswerFeedback } from "./AnswerFeedback";
 import { SourceList } from "./SourceList";
 import type { AnswerPayload } from "./types";
 
@@ -21,8 +22,8 @@ export function AnswerCard({
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
         <span className="font-mono">{payload.model.model}</span>
-        <span>·</span>
-        <span>{(payload.timing.totalMs / 1000).toFixed(1)}s</span>
+        <span aria-hidden>·</span>
+        <span className="tnum">{(payload.timing.totalMs / 1000).toFixed(1)}s</span>
         <span>·</span>
         <button
           type="button"
@@ -31,10 +32,12 @@ export function AnswerCard({
         >
           {showProvenance ? "Hide sources" : "How did I get this?"}
         </button>
+        <span aria-hidden>·</span>
+        <AnswerFeedback traceId={payload.traceId} />
       </div>
 
       {showProvenance && (
-        <div className="flex flex-col gap-2 rounded-xl bg-surface-soft p-3">
+        <div className="flex flex-col gap-2.5 rounded-xl border-[0.5px] border-line bg-surface-soft p-3.5">
           <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-4">
             <Stat label="Top score" value={payload.grade.score?.toFixed(3) ?? "—"} />
             <Stat label="Retrieval" value={`${payload.timing.retrievalMs}ms`} />
@@ -57,7 +60,7 @@ export function AnswerCard({
               key={question}
               type="button"
               onClick={() => onFollowUp(question)}
-              className="rounded-full border-[0.5px] border-line bg-surface px-3 py-1.5 text-left text-[13px] text-body transition-colors hover:border-accent hover:text-ink"
+              className="rounded-full border-[0.5px] border-line bg-surface px-3.5 py-1.5 text-left text-[13px] text-body shadow-xs hover:border-accent hover:text-ink hover:shadow-sm"
             >
               {question}
             </button>
@@ -70,10 +73,15 @@ export function AnswerCard({
 
 function Answer({ payload }: { payload: AnswerPayload }) {
   return (
-    <div className="rounded-2xl border-[0.5px] border-line bg-surface p-4">
-      <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-ink">{payload.answer}</p>
+    <div className="rounded-2xl border-[0.5px] border-line bg-surface p-4 shadow-sm">
+      {/* A hairline accent rule marks answered content, so answered and refused
+          are distinguishable at a glance before any text is read. */}
+      <div className="flex gap-3.5">
+        <span aria-hidden className="mt-1 w-0.5 shrink-0 rounded-full bg-accent/40" />
+        <p className="whitespace-pre-wrap text-[15px] leading-[1.65] text-ink">{payload.answer}</p>
+      </div>
       {payload.citations.length > 0 && (
-        <p className="mt-3 border-t-[0.5px] border-line pt-2.5 text-xs text-muted">
+        <p className="mt-3.5 border-t-[0.5px] border-line pt-2.5 text-xs text-muted">
           Drawn from{" "}
           {payload.citations.map((n, i) => {
             const source = payload.sources.find((s) => s.n === n);
@@ -107,11 +115,11 @@ function Answer({ payload }: { payload: AnswerPayload }) {
  */
 function Refusal({ payload }: { payload: AnswerPayload }) {
   return (
-    <div className="rounded-2xl border-[0.5px] border-refusal/40 bg-refusal-tint p-4">
+    <div className="rounded-2xl border-[0.5px] border-refusal/40 bg-refusal-tint p-4 shadow-sm">
       <p className="text-[11px] font-medium uppercase tracking-[0.06em] text-refusal">
         Not answered from these documents
       </p>
-      <p className="mt-2 text-[15px] leading-relaxed text-ink">{payload.refusalReason}</p>
+      <p className="mt-2 text-[15px] leading-[1.65] text-ink">{payload.refusalReason}</p>
       <p className="mt-3 border-t-[0.5px] border-refusal/25 pt-2.5 text-xs leading-relaxed text-body">
         {payload.sources.length === 0
           ? "Nothing in this collection matched the question at all."
@@ -126,7 +134,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <dt className="text-muted">{label}</dt>
-      <dd className="mt-0.5 font-mono text-[12px] text-body">{value}</dd>
+      <dd className="tnum mt-0.5 font-mono text-[12px] text-body">{value}</dd>
     </div>
   );
 }

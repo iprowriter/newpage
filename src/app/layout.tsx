@@ -10,6 +10,8 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 export const metadata: Metadata = {
   title: "Document assistant",
   description: "Ask questions about a document collection, with citations and an honest no.",
+  // src/app/icon.svg is picked up automatically as the favicon — the Newpage
+  // mark, extracted from their wordmark so it reads at 16px.
 };
 
 /**

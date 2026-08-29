@@ -1,5 +1,4 @@
 import type { Provider } from "./providers/types";
-import type { ProducedChunk } from "./types";
 
 /**
  * Three opening questions, generated at ingest and stored (ADR-0019).
@@ -34,9 +33,19 @@ const SCHEMA = {
   required: ["questions"],
 };
 
+/**
+ * The minimum a chunk has to provide. Structural rather than `ProducedChunk` so
+ * this works both at ingest (chunks in memory) and when backfilling documents
+ * that were indexed before this step existed (chunks read back from Postgres).
+ */
+export interface QuestionSource {
+  headingPath: string[];
+  displayText: string;
+}
+
 export async function generateStarterQuestions(
   title: string,
-  chunks: ProducedChunk[],
+  chunks: QuestionSource[],
   provider: Provider,
 ): Promise<string[]> {
   const headings = [...new Set(chunks.flatMap((c) => c.headingPath))].slice(0, 40);

@@ -64,11 +64,11 @@ export function DocumentList({
       {visible.map((document) => (
         <li
           key={document.id}
-          className="flex items-center gap-3 rounded-lg border-[0.5px] border-line bg-surface px-3 py-2"
+          className="flex items-center gap-3 rounded-lg border-[0.5px] border-line bg-surface px-3 py-2 shadow-xs"
         >
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[13px] text-ink">{document.filename}</span>
-            <span className="mt-0.5 block truncate text-xs text-muted">
+            <span className="tnum mt-0.5 block truncate text-xs text-muted">
               {document.status === "ready"
                 ? `${document.chunkCount} chunks${document.pageCount ? ` · ${document.pageCount} pages` : ""} · added ${new Date(document.createdAt).toLocaleDateString()}`
                 : (document.error ?? STATUS_LABEL[document.status])}

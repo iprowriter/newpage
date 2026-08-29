@@ -58,7 +58,7 @@ export function TracesView() {
           {traces.map((trace) => {
             const open = openId === trace.id;
             return (
-              <li key={trace.id} className="rounded-xl border-[0.5px] border-line bg-surface">
+              <li key={trace.id} className="rounded-xl border-[0.5px] border-line bg-surface shadow-xs">
                 <button
                   type="button"
                   onClick={() => setOpenId(open ? null : trace.id)}
@@ -76,7 +76,7 @@ export function TracesView() {
                   />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[13px] text-ink">{trace.question}</span>
-                    <span className="mt-0.5 block text-xs text-muted">
+                    <span className="tnum mt-0.5 block text-xs text-muted">
                       {trace.collection} · {trace.outcome} · {(trace.latencyMs / 1000).toFixed(1)}s ·{" "}
                       <span className="font-mono">{trace.model}</span>
                     </span>
@@ -114,7 +114,7 @@ export function TracesView() {
                             key={source.n}
                             className="flex items-center gap-2 text-xs text-muted"
                           >
-                            <span className="font-mono text-[11px]">{source.score.toFixed(3)}</span>
+                            <span className="tnum font-mono text-[11px]">{source.score.toFixed(3)}</span>
                             <span className="truncate text-body">
                               {source.filename}
                               {source.page ? ` · p${source.page}` : ""}
@@ -138,7 +138,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <dt className="text-muted">{label}</dt>
-      <dd className="mt-0.5 font-mono text-[12px] text-body">{value}</dd>
+      <dd className="tnum mt-0.5 font-mono text-[12px] text-body">{value}</dd>
     </div>
   );
 }

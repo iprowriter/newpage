@@ -22,7 +22,7 @@ export function SourceList({ sources, cited }: { sources: Source[]; cited: numbe
         const used = cited.includes(source.n);
         const open = openId === source.chunkId;
         return (
-          <li key={source.chunkId} className="rounded-lg border-[0.5px] border-line bg-surface">
+          <li key={source.chunkId} className="rounded-lg border-[0.5px] border-line bg-surface shadow-xs">
             <button
               type="button"
               onClick={() => setOpenId(open ? null : source.chunkId)}
@@ -30,7 +30,7 @@ export function SourceList({ sources, cited }: { sources: Source[]; cited: numbe
               aria-expanded={open}
             >
               <span
-                className={`mt-px shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[11px] ${
+                className={`tnum mt-px shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[11px] ${
                   used ? "bg-citation-tint text-accent-on-tint" : "bg-surface-soft text-muted"
                 }`}
               >
@@ -77,7 +77,7 @@ function ScoreBar({ score }: { score: number }) {
           }}
         />
       </span>
-      <span className="w-8 text-right font-mono text-[11px] text-muted">{score.toFixed(2)}</span>
+      <span className="tnum w-8 text-right font-mono text-[11px] text-muted">{score.toFixed(2)}</span>
     </span>
   );
 }
