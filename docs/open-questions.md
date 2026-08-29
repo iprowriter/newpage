@@ -27,7 +27,13 @@ Undecided. Each becomes an ADR when closed; the closed set becomes `specs.md`.
 
 ### 12. Compose cold-start check
 
-Not a design question — the one item that stays open until submission. Clone into a clean
+Not a design question — the one item that stays open until submission.
+
+**Run once, mid-build, and it passed**: an isolated project with fresh volumes came up clean —
+migrate ran and exited, Ollama pulled its embedding model, the app served, and the seed indexed
+778 chunks unattended. Two failures were found and fixed *because* of it (a port collision on
+5432, and a Qdrant healthcheck that could never pass). Compose has since grown Jaeger and the
+Dockerfile, so the final run is still owed. Clone into a clean
 directory, `docker compose up`, follow only the README, see whether it actually works. The risk
 with containerisation isn't Docker, it's an untested compose file. Do it at least twice: once
 mid-build, once at the end. ADR-0016 keeps the service count at three specifically to protect this.

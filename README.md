@@ -35,37 +35,29 @@ What that implies, and it shapes everything below:
 
 ## Current state
 
-Nothing built. Decisions recorded in `docs/adr/` as they're made; `specs.md` gets written once
-the open questions in `docs/open-questions.md` are closed.
+**Tier 0 and Tier 1 of [`docs/scope.md`](docs/scope.md) are complete.** The application works end
+to end, containerised, with measured numbers.
 
-**Stack decided.** Full-stack Next.js, TypeScript, three compose services.
-
-```
-app/            routes + UI
-app/api/        thin route handlers
-lib/rag/        the retrieval core — plain TS, zero Next imports
-scripts/        headless entry points, incl. the eval harness
-```
-
-| Service | What |
+| | |
 |---|---|
-| `web` | The Next.js app |
-| `postgres` | Collections, documents, query traces, eval runs |
-| `qdrant` | Vectors and chunk payloads — one collection, filtered by `collection_id` |
+| Corpus | 8 FDA guidance PDFs, 778 chunks, two collections |
+| Stack | Next.js 16 · Postgres · Qdrant · Ollama (embeddings) · Jaeger |
+| Providers | Gemini (default, pinned) · Ollama (local) |
+| Tests | 29, no network, under 3s |
+| Eval | 26 cases — hosted 26/26; local 12/26 (all answerable false-refused) |
+| Cold start | `docker compose up` verified from empty volumes |
 
-LLM: Gemini by default (pinned ID), Ollama for the local path. Embeddings always local. No
-Python anywhere in the stack. LangGraph orchestrates control flow only — Qdrant is called
-directly. Traces persist to Postgres and render in-app at `/traces`, with OTel emitted alongside
-as the production seam.
+Everything below is still to do, and the first item matters most.
 
-Demo corpus is FDA guidance split into Clinical Operations and Manufacturing Quality — public
-domain, and their vocabulary overlaps, which makes the isolation test meaningful rather than
-trivial (ADR-0017).
-
-**Design is settled.** [`specs.md`](specs.md) is what gets built; [`docs/adr/`](docs/adr/) is why.
-The only question left open is the compose cold-start check, which stays open until submission.
-
-Nothing is built yet. Next step is Tier 0 of [`docs/scope.md`](docs/scope.md).
+1. **The submission README.** This file is working notes. The real one is deliverable #2 with
+   nine required subsections, and the brief says twice that it must be my own thinking. The
+   material is in [`docs/adr/`](docs/adr/) — that is what those were for.
+2. **Screenshots** (deliverable #3), and a video if time allows.
+3. **Final cold-start check** — open question 12 says do it twice. The mid-build run passed; the
+   Dockerfile and Compose have changed since.
+4. Tier 2, only with an eval number attached. Hybrid retrieval is the strongest candidate:
+   Qdrant has native sparse vectors and a fusion API, so it is configuration rather than
+   hand-rolled BM25.
 
 ## Layout
 

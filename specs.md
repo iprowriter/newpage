@@ -17,9 +17,10 @@ rather than a trivial one (ADR-0017).
 
 ## 2. Scope
 
-**In:** collections, PDF/text ingestion, structure-aware chunking, local embeddings, filtered
-vector retrieval, grounded generation with citations, refusal on weak retrieval, a trace viewer,
-an eval harness, Docker Compose.
+**In:** collections *and chats* (ADR-0022), PDF/text ingestion, structure-aware chunking, local
+embeddings, filtered vector retrieval, grounded generation with citations, refusal on weak
+retrieval, collection summaries, answer feedback, typed provider errors with retry, an in-app
+trace viewer plus OpenTelemetry to Jaeger, an eval harness, Docker Compose.
 
 **Out, and stated in the README:** auth and real multi-tenancy, `.docx`/OCR/scanned PDFs
 (ADR-0018), voice input (ADR-0005), conversation memory beyond the current thread, incremental
@@ -48,7 +49,13 @@ re-indexing, async ingestion queues.
         └──────────────┘       └───────────────┘
 ```
 
-Three compose services (ADR-0007, ADR-0010, ADR-0016). No Python anywhere (ADR-0011).
+Seven compose services: `postgres`, `qdrant`, `ollama` (embeddings only), `jaeger`, `migrate`
+(runs to completion, gates `web`), `web`, `seed` (runs after `web` is serving). No Python in the
+application (ADR-0011); Qdrant and Ollama are prebuilt images.
+
+Ollama is containerised **for embeddings only** — the GPU argument that keeps generation on the
+host (ADR-0003) does not apply to embedding models, and without a guaranteed embedding endpoint
+`docker compose up` yields an app that cannot ingest anything at all.
 
 **Binding constraint:** nothing under `src/lib/rag/` imports from `next`. Enforced by an ESLint
 import rule. This is what keeps the core unit-testable and lets `scripts/eval.ts` run the whole
@@ -63,10 +70,10 @@ pipeline headless with no server (ADR-0007).
 
 | Table | Purpose |
 |---|---|
-| `collections` | id, name, description, retrieval config (chunk size, top-k), timestamps |
+| `collections` | id, name, **kind (`collection` \| `chat`)**, description, retrieval config, cached summary + document fingerprint |
 | `documents` | id, collection_id, filename, mime, page count, ingest status, error, timestamps |
 | `chunks` | id, document_id, collection_id, chunk index, page, heading path, char offsets, display text |
-| `query_traces` | one row per query — see §9 |
+| `query_traces` | one row per query — see §9 — including human feedback (up/down + note) |
 | `eval_runs` / `eval_results` | one row per run and per question — see §8 |
 
 `chunks` holds the **display text** and positional metadata. Qdrant holds the vector and a
@@ -167,9 +174,32 @@ version control, plus fixed string assertions as a floor that works even when th
 in-domain/out-of-corpus, out-of-collection, false premise, answerable-shaped but unstated, and
 wrong-domain. Refusal rate on these is the headline number for this audience.
 
-Every run persists to Postgres with pinned model ID, chunk config and retrieval config, so the
-comparisons the README promises — 350 vs 800 token chunks, hosted vs local, hybrid vs dense — are
-queries against real rows rather than remembered numbers.
+Labels are **text snippets, not chunk ids** — chunk ids are per-install UUIDs, and any label tied
+to a chunk is invalidated by the chunk-size comparison this harness exists to run. A retrieval hit
+means a retrieved chunk came from the expected file and contained an expected phrase.
+
+The judge is **pinned to the hosted model regardless of what is under test** (`--judge-provider`).
+Swapping the grader alongside the subject changes two variables at once, and asking a 3B model to
+detect its own unsupported claims is asking it for the thing it is worst at.
+
+Every run persists to Postgres with pinned model id, chunk config and retrieval config.
+
+**Measured, 26 cases (12 answerable, 14 negative):**
+
+| | recall@6 | MRR | grounded | citations | refusal | false refusal |
+|---|---|---|---|---|---|---|
+| hosted `gemini-3.6-flash` | 100% | 0.714 | 100% | 75% | 100% | **0%** |
+| local `llama3.2:3b` | 100% | 0.714 | — | — | 100% | **100%** |
+
+Retrieval is identical because it does not involve the generation model. Both score a perfect
+refusal rate — which is precisely why refusal is never reported alone: the local model earns its
+100% by declining all twelve questions it should have answered.
+
+The cause is specific, and was checked rather than assumed: the local model emits **valid JSON
+containing the correct answer**, then sets `sufficient: false`. Not a schema failure, not a
+retrieval failure — a self-assessment failure. Deliberately not patched: overriding `sufficient`
+when the answer "looks substantial" would recover the local path by destroying the guardrail that
+catches sources on the right topic which never state the answer.
 
 ## 9. Observability
 
@@ -194,11 +224,16 @@ rag.extract                   document id, mime type, page count      (ingest)
 rag.embed_documents           chunk count, embedding model            (ingest)
 ```
 
-No exporter is wired and no collector runs in Compose — that would take the stack from six
-services to seven for a demo whose traces already render in-app. With no
-`OTEL_EXPORTER_OTLP_ENDPOINT` the SDK records spans and drops them, so the instrumented path is
-identical in dev, in tests and in production, and shipping to Langfuse, Datadog or Honeycomb is
-one environment variable.
+**Jaeger ships in Compose** (ADR-0023, revising ADR-0016) and the exporter points at it by
+default, so the OpenTelemetry claim is something a reviewer clicks rather than reads. `/traces`
+links to it. Override `OTEL_EXPORTER_OTLP_ENDPOINT` and the same spans go to Langfuse, Datadog or
+Honeycomb instead — that one variable is the entire integration.
+
+The two views answer different questions and neither subsumes the other: `/traces` is this
+system's story (chunk text, scores, grade decisions, refusal reasons, human feedback); Jaeger is
+the standard shape, with the downstream HTTP calls to Qdrant, Ollama and Gemini nested under each
+stage. Jaeger stores in memory, so traces do not survive a restart — correct for a demo, and
+named as such in productionisation.
 
 ## 10. Surfaces
 
@@ -206,7 +241,12 @@ one environment variable.
 
 | Route | Purpose |
 |---|---|
-| `POST /api/collections` · `GET /api/collections` | Create and list |
+| `POST /api/collections` · `GET /api/collections` | Create and list (collections and chats) |
+| `POST /api/chats` | Create a chat — called by the first upload, not on click |
+| `POST /api/chats/:id/promote` | Move a chat's documents into a collection, then delete the chat |
+| `POST /api/collections/:id/summary` | Generate or serve a cached collection summary |
+| `DELETE /api/collections/:id` | Delete a collection or chat and everything in it |
+| `POST /api/traces/:id/feedback` | Record a reader's up/down verdict on an answer |
 | `POST /api/collections/:id/documents` | Upload and ingest |
 | `DELETE /api/documents/:id` | Delete — see below |
 | `POST /api/query` | Ask, scoped to a collection. Streams. |
@@ -222,20 +262,29 @@ retrievable and could surface as a citation to a deleted document. Failure marks
 
 Design tokens and restraint rules: ADR-0021. Flows and rationale: ADR-0019.
 
-**Shell** — collections in a left sidebar (name, document count). Header carries the
-light/dark toggle and the local/hosted provider switch. Violet accent, semantic tokens only.
+**Shell** — a pinned sidebar (the viewport scrolls in two independent panes) with **Collections**
+and **Chats** as separate sections, each entry deletable on hover. "New chat" is a link to a draft
+that persists nothing until its first upload — an eagerly-created chat leaves an empty row behind
+on every click that goes nowhere. Provider and theme toggles sit at the bottom, above a link to
+Jaeger. Violet accent, semantic tokens only, tabular figures on every number.
 
-**Collection view — the only page type.** The landing experience is a seeded *Quick start*
-collection, not a separate ephemeral mode (ADR-0019), so there is exactly one page to build:
+**Collection view — the only page type**, for collections and chats alike (ADR-0022). A segmented
+control switches between **Ask** and **Sources**; Sources is paginated. A chat additionally offers
+"Move to collection".
 
 - Upload, then documents listed with date added, ingest status
   (`pending / processing / ready / failed`) and chunk count. Delete asks first.
-- Empty state is the upload target. After first ingest: *"What do you want to know?"* plus three
-  starter questions generated at ingest from the document's heading tree and stored.
+- Empty state is the upload target. After first ingest: a **Summarise** button (generated on
+  demand from each document's headings and sampled text, cached against a fingerprint of the
+  member document ids), then *"What do you want to know?"* plus three starter questions generated
+  at ingest — one per document across the most recent documents, so a multi-document collection
+  does not look narrower than it is.
 - Ask, or click a suggestion. Answer streams in with inline citations; each citation opens the
   source chunk with heading path and page.
-- Under every answer: the model that produced it and its latency, plus an expandable **how did I
-  get this** — retrieved chunks with scores, the grade decision, whether rewrite-retry fired.
+- Under every answer: the model that produced it and its latency, an expandable **how did I get
+  this** (retrieved chunks with scores, grade decision, whether rewrite-retry fired), and
+  **thumbs up/down** — placed there because provenance and judgement are the same act, and each
+  rating lands on the trace beside the chunks and prompt that produced it.
 - Two follow-up questions, derived from the retrieved chunks and returned as structured output in
   the *same* generation call as the answer.
 
@@ -244,6 +293,13 @@ rather than `--danger` per ADR-0021). Shows what was searched, what came back an
 why it fell below threshold, whether a rewrite was attempted, and what to try instead.
 
 **Traces** (`/traces`) — recent queries, drill into one, everything in §9.
+
+**Failure state** — a third surface, distinct from both. A refusal uses `--warn` because it is
+the system working; a *failure* uses `--danger` because it is not. Provider errors are typed
+(`unavailable`, `rate_limited`, `auth`, `model_retired`, `model_missing`, `network`), retried with
+backoff and jitter where that could help, and rendered with the action that fits — including
+"Run locally instead" when the hosted model is overloaded, which is exactly when the local path
+earns its keep.
 
 **Not built:** authentication. `collectionId` comes from the request body, which is correct for a
 demo and wrong for production; the README states the session-derived design and names the single
@@ -259,8 +315,11 @@ Not coverage theatre. Four things that fail silently:
    chunk, asserted against the single entry point of §7.3.
 4. **Retry bound** — the rewrite edge fires at most once, then refuses.
 
-Plus deletion ordering (§10), and citation resolution (§7.4). The LLM is mocked at the provider
-seam (ADR-0003) so these run fast and free.
+Plus **deletion ordering** (§10) — asserted by recording call *sequence*, since the failure it
+guards against is a later edit that looks harmless — **citation resolution** (§7.4), and the
+**retry policy** in both directions: that it retries transient failures up to a bound, and that it
+does *not* retry a rejected key. The LLM is mocked at the provider seam (ADR-0003), so all 29 tests
+run in under three seconds with no network and no cost.
 
 ## 12. Configuration
 
