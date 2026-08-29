@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { createClient } from "@/lib/rag/vector";
 import { generateStarterQuestions } from "@/lib/rag/starter-questions";
 import { getDb } from "@/lib/db";
-import { getEmbeddingModel, getOllamaBaseUrl, getQdrantUrl } from "@/lib/env";
+import { getEmbeddingBaseUrl, getEmbeddingModel, getQdrantUrl } from "@/lib/env";
 import { ingestDocument } from "@/lib/ingest";
 import { resolveProvider } from "@/lib/rag-runtime";
 
@@ -39,7 +39,7 @@ const COLLECTIONS = [
 
 const db = getDb();
 const qdrant = createClient(getQdrantUrl());
-const embedding = { baseUrl: getOllamaBaseUrl(), model: getEmbeddingModel() };
+const embedding = { baseUrl: getEmbeddingBaseUrl(), model: getEmbeddingModel() };
 
 /**
  * Starter questions need a generation provider, and the seed previously did not

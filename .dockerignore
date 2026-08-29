@@ -1,0 +1,13 @@
+# Build context hygiene. Everything here either rebuilds inside the image or must
+# never enter it.
+node_modules
+.next
+.git
+.env
+.env.local
+.env.*.local
+npm-debug.log*
+*.tsbuildinfo
+docs
+README.md
+.DS_Store

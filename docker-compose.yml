@@ -61,22 +61,91 @@ services:
       timeout: 5s
       retries: 10
 
+  # Embeddings, in a container on purpose.
+  #
+  # ADR-0003 keeps *generation* on the host because Docker Desktop gives
+  # containers no GPU on macOS. That argument does not reach embeddings: they are
+  # small and CPU-fast (ADR-0004), and they are required to ingest anything at
+  # all. Without a guaranteed endpoint, `docker compose up` yields an application
+  # that cannot accept a document — generation degrades to a config change,
+  # embeddings degrade to a dead demo.
+  ollama:
+    image: ollama/ollama:0.5.7
+    restart: unless-stopped
+    volumes:
+      - ollamadata:/root/.ollama
+    # Serve, then pull the embedding model in the background. The pull is ~275MB
+    # on first run only; the healthcheck below is what makes everything else wait
+    # for it rather than failing against a model that is not there yet.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        ollama serve &
+        until ollama list >/dev/null 2>&1; do sleep 1; done
+        ollama pull ${EMBEDDING_MODEL:-nomic-embed-text}
+        wait
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list | grep -q ${EMBEDDING_MODEL:-nomic-embed-text}"]
+      interval: 10s
+      timeout: 10s
+      retries: 60
+      start_period: 30s
+
+  # Migrations as their own step rather than an entrypoint hook, built from the
+  # `builder` stage because the Prisma CLI is a devDependency and deliberately
+  # absent from the runtime image. Running to completion before `web` starts
+  # means the app never serves against a schema it does not match.
+  migrate:
+    build:
+      context: .
+      target: builder
+    command: ["npx", "prisma", "migrate", "deploy"]
+    # Compose reads `.env` by default, but `.env.local` is where the setup
+    # instructions (and Next's own dev server) put the key — so without this a
+    # reviewer who followed the README gets no generation provider and no
+    # explanation. Optional, so a checkout with no env file still comes up.
+    # `environment:` below takes precedence, which is what keeps DATABASE_URL and
+    # friends pointed at the container network rather than at localhost.
+    env_file:
+      - path: .env.local
+        required: false
+    environment:
+      DATABASE_URL: postgresql://newpage:newpage@postgres:5432/newpage
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   web:
-    build: .
+    build:
+      context: .
+      target: runner
     restart: unless-stopped
     ports:
       - "127.0.0.1:${WEB_PORT:-3000}:3000"
+    # Compose reads `.env` by default, but `.env.local` is where the setup
+    # instructions (and Next's own dev server) put the key — so without this a
+    # reviewer who followed the README gets no generation provider and no
+    # explanation. Optional, so a checkout with no env file still comes up.
+    # `environment:` below takes precedence, which is what keeps DATABASE_URL and
+    # friends pointed at the container network rather than at localhost.
+    env_file:
+      - path: .env.local
+        required: false
     environment:
       DATABASE_URL: postgresql://newpage:newpage@postgres:5432/newpage
       QDRANT_URL: http://qdrant:6333
       # Ollama runs natively on the host, never in this image (ADR-0003): Docker Desktop
       # on macOS gives containers no GPU, so an in-container model would be CPU-only.
+      # Generation talks to the host (GPU); embeddings to the container (CPU is fine).
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
-      LLM_PROVIDER: ${LLM_PROVIDER:-gemini}
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.6-flash}
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
+      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-http://ollama:11434}
+      # Model ids and the API key deliberately absent: they come from
+      # `.env.local` via env_file above. Listing them here with `${VAR:-}`
+      # defaults would set them to the empty string when the shell has none —
+      # and because `environment:` outranks `env_file`, that empty value would
+      # win over the key the reviewer actually configured. Their defaults live in
+      # src/lib/env.ts instead, where they are version controlled.
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -84,7 +153,40 @@ services:
         condition: service_healthy
       qdrant:
         condition: service_healthy
+      ollama:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  # Ingests the committed FDA corpus (ADR-0017). Runs after the app is already
+  # serving rather than before, so the first boot is usable immediately and
+  # documents appear with their ingest status as they are indexed — a five-minute
+  # silent wait before anything renders would be a worse first impression than
+  # watching it fill.
+  seed:
+    build:
+      context: .
+      target: builder
+    command: ["npx", "tsx", "scripts/seed.mts"]
+    # Compose reads `.env` by default, but `.env.local` is where the setup
+    # instructions (and Next's own dev server) put the key — so without this a
+    # reviewer who followed the README gets no generation provider and no
+    # explanation. Optional, so a checkout with no env file still comes up.
+    # `environment:` below takes precedence, which is what keeps DATABASE_URL and
+    # friends pointed at the container network rather than at localhost.
+    env_file:
+      - path: .env.local
+        required: false
+    environment:
+      DATABASE_URL: postgresql://newpage:newpage@postgres:5432/newpage
+      QDRANT_URL: http://qdrant:6333
+      EMBEDDING_BASE_URL: http://ollama:11434
+    depends_on:
+      web:
+        condition: service_started
+    restart: "no"
 
 volumes:
   pgdata:
   qdrantdata:
+  ollamadata:

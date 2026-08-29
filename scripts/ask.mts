@@ -1,6 +1,6 @@
 /** Retrieval probe. `npx tsx scripts/ask.mts "<collection>" "<question>"` */
 import { getDb } from "@/lib/db";
-import { getEmbeddingModel, getOllamaBaseUrl, getQdrantUrl } from "@/lib/env";
+import { getEmbeddingBaseUrl, getEmbeddingModel, getQdrantUrl } from "@/lib/env";
 import { retrieve } from "@/lib/rag/retrieve";
 import { createClient } from "@/lib/rag/vector";
 
@@ -12,7 +12,7 @@ const result = await retrieve(
   { collectionId: collection.id, question, topK: 4 },
   {
     qdrant: createClient(getQdrantUrl()),
-    embedding: { baseUrl: getOllamaBaseUrl(), model: getEmbeddingModel() },
+    embedding: { baseUrl: getEmbeddingBaseUrl(), model: getEmbeddingModel() },
     loadChunks: async (ids) => {
       const rows = await db.chunk.findMany({
         where: { id: { in: ids } },

@@ -2,6 +2,7 @@ import type { PrismaClient } from "@prisma/client";
 
 import { getDb } from "@/lib/db";
 import {
+  getEmbeddingBaseUrl,
   getEmbeddingModel,
   getModelId,
   getOllamaBaseUrl,
@@ -65,7 +66,7 @@ export function chunkLoader(db: PrismaClient): ChunkLoader {
 }
 
 export function embeddingOptions() {
-  return { baseUrl: getOllamaBaseUrl(), model: getEmbeddingModel() };
+  return { baseUrl: getEmbeddingBaseUrl(), model: getEmbeddingModel() };
 }
 
 export function graphDeps(provider: Provider): GraphDeps {

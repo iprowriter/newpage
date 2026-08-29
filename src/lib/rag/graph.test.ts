@@ -92,6 +92,32 @@ describe("answer graph", () => {
     expect(result.refusalReason).toMatch(/never give the retention period/);
   });
 
+  // The citation-resolution test (specs.md §11). A citation that does not point
+  // at a real retrieved source is not a formatting quirk — it is a claim of
+  // provenance the system cannot honour, and the UI renders it as a filename and
+  // page number the reader will trust.
+  it("only returns citations that index into the retrieved sources", async () => {
+    const { graph } = harness({
+      score: 0.9,
+      answerJson: JSON.stringify({
+        sufficient: true,
+        answer: "Consent must be documented.",
+        missing: "",
+        citations: [1],
+        followUps: [],
+      }),
+    });
+
+    const result = await run(graph);
+
+    expect(result.chunks).toHaveLength(1);
+    for (const n of result.citations) {
+      expect(n).toBeGreaterThanOrEqual(1);
+      expect(n).toBeLessThanOrEqual(result.chunks.length);
+      expect(result.chunks[n - 1]).toBeDefined();
+    }
+  });
+
   // Small local models drift out of schema. An unparseable response is the case
   // where the system knows least about what it is holding, so it must not answer.
   it("refuses rather than throwing when the response is not valid JSON", async () => {

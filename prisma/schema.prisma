@@ -245,6 +245,17 @@ model EvalRun {
   /// answer, how many were correctly refused.
   refusalRate      Float?
 
+  /// The counterweight, and the reason refusalRate is never reported alone: a
+  /// system that refuses everything scores a perfect refusal rate. This is the
+  /// fraction of *answerable* questions it wrongly declined — the failure the
+  /// local 3B model produced on a question retrieval had already nailed.
+  falseRefusalRate Float?
+
+  /// LLM-as-judge is itself a model with a version. A groundedness score is not
+  /// comparable across judges, so the judge is pinned and recorded like any
+  /// other model (ADR-0014).
+  judgeModel String?
+
   results EvalResult[]
 
   startedAt  DateTime  @default(now())

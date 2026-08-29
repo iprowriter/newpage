@@ -4,6 +4,17 @@ import { getDb } from "@/lib/db";
 import { NewChatButton } from "@/components/NewChatButton";
 
 /**
+ * Rendered per request, never prerendered.
+ *
+ * This route reads the database to decide where to send you, so there is no
+ * correct build-time answer — and trying to compute one fails the Docker build
+ * outright, since no database exists while the image is being built. The local
+ * build only ever passed because `.env.local` and a running Postgres happened to
+ * be there, which is precisely the sort of thing containerising surfaces.
+ */
+export const dynamic = "force-dynamic";
+
+/**
  * Prefers a real collection, falling back to whatever exists.
  *
  * There is no seeded landing collection any more: it existed to give a one-off

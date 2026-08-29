@@ -1,13 +1,13 @@
 /** Measures top-1 score for answerable vs unanswerable questions, to set MIN_SCORE from data. */
 import { getDb } from "@/lib/db";
-import { getEmbeddingModel, getOllamaBaseUrl, getQdrantUrl } from "@/lib/env";
+import { getEmbeddingBaseUrl, getEmbeddingModel, getQdrantUrl } from "@/lib/env";
 import { retrieve } from "@/lib/rag/retrieve";
 import { createClient } from "@/lib/rag/vector";
 
 const db = getDb();
 const deps = {
   qdrant: createClient(getQdrantUrl()),
-  embedding: { baseUrl: getOllamaBaseUrl(), model: getEmbeddingModel() },
+  embedding: { baseUrl: getEmbeddingBaseUrl(), model: getEmbeddingModel() },
   loadChunks: async (ids: string[]) => {
     const rows = await db.chunk.findMany({ where: { id: { in: ids } }, include: { document: true } });
     return rows.map((r) => ({

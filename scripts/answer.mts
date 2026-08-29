@@ -1,6 +1,6 @@
 /** End-to-end graph probe. `npx tsx scripts/answer.mts "<collection>" "<question>"` */
 import { getDb } from "@/lib/db";
-import { getEmbeddingModel, getModelId, getOllamaBaseUrl, getProvider, getQdrantUrl } from "@/lib/env";
+import { getEmbeddingBaseUrl, getEmbeddingModel, getModelId, getOllamaBaseUrl, getProvider, getQdrantUrl } from "@/lib/env";
 import { buildAnswerGraph } from "@/lib/rag/graph";
 import { geminiProvider } from "@/lib/rag/providers/gemini";
 import { ollamaProvider } from "@/lib/rag/providers/ollama";
@@ -19,7 +19,7 @@ const provider =
 const graph = buildAnswerGraph({
   provider,
   qdrant: createClient(getQdrantUrl()),
-  embedding: { baseUrl: getOllamaBaseUrl(), model: getEmbeddingModel() },
+  embedding: { baseUrl: getEmbeddingBaseUrl(), model: getEmbeddingModel() },
   loadChunks: async (ids) => {
     const rows = await db.chunk.findMany({ where: { id: { in: ids } }, include: { document: true } });
     return rows.map((r) => ({
