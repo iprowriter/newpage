@@ -253,13 +253,14 @@ named as such in productionisation.
 | `POST /api/collections` · `GET /api/collections` | Create and list (collections and chats) |
 | `POST /api/chats` | Create a chat — called by the first upload, not on click |
 | `POST /api/chats/:id/promote` | Move a chat's documents into a collection, then delete the chat |
-| `POST /api/collections/:id/summary` | Generate or serve a cached collection summary |
+| `POST /api/collections/:id/summary` | Generate a collection summary — `force=1` to bypass the cache, `provider` as `/api/query` (ADR-0026) |
 | `DELETE /api/collections/:id` | Delete a collection or chat and everything in it |
 | `POST /api/traces/:id/feedback` | Record a reader's up/down verdict on an answer |
 | `POST /api/collections/:id/documents` | Upload and ingest |
 | `DELETE /api/documents/:id` | Delete — see below |
-| `POST /api/query` | Ask, scoped to a collection. Streams. |
+| `POST /api/query` | Ask, scoped to a collection. Streams. Rejects a question over 300 characters. |
 | `GET /api/collections/:id/history` | Past questions and answers, rebuilt from `query_traces` (ADR-0025) |
+| `GET /api/collections/:id` | Documents, plus the stored summary — served only while its fingerprint still matches (ADR-0026) |
 | `GET /api/traces` · `GET /api/traces/:id` | Trace viewer data |
 
 **Deletion across two stores** (closes open question 11): delete Qdrant points by filter first,
@@ -283,14 +284,28 @@ control switches between **Ask** and **Sources**; Sources is paginated. A chat a
 "Move to collection".
 
 - Upload, then documents listed with date added, ingest status
-  (`pending / processing / ready / failed`) and chunk count. Delete asks first.
+  (`pending / processing / ready / failed`) and chunk count. Delete asks first. A document still
+  being ingested spins in place — in the drop zone, which takes the accent tint and stops accepting
+  input for the duration, and in the status badge on the Sources list. A spinner rather than the
+  skeleton used for answers: a skeleton stands in for a known shape, and nothing takes the drop
+  zone's place when indexing finishes.
 - Empty state is the upload target. After first ingest: a **Summarise** button (generated on
   demand from each document's headings and sampled text, cached against a fingerprint of the
   member document ids), then *"What do you want to know?"* plus three starter questions generated
   at ingest — one per document across the most recent documents, so a multi-document collection
   does not look narrower than it is.
+- The summary, once generated, **stays** (ADR-0026). It is stored, served back with the collection
+  while its fingerprint still matches, and sits above the thread — open while there is nothing else
+  to read, collapsed to a "What is in here" row once there is a conversation, with **Summarise
+  again** under it. When the documents change it is withheld rather than shown stale, and the card
+  says so instead.
 - Ask, or click a suggestion. Answer streams in with inline citations; each citation opens the
   source chunk with heading path and page.
+- The composer caps a question at **300 characters** — roughly three sentences, and more than a
+  single embedding can usefully represent, since a long multi-part question averages its parts and
+  matches none of them well. `maxLength` stops the typing and truncates a paste; a counter appears
+  over the last 60 characters so the stop is explained rather than felt. `/api/query` enforces the
+  same number, because the field is a convenience and the route is the control.
 - Highlight any sentence of an answer and a **"Where is this from?"** control traces it back to the
   passage it came from, marked in place (ADR-0024). Lexical matching, so it reports `strong`,
   `closest match`, or that no single passage supports the selection. Never the word "citation".
@@ -308,7 +323,17 @@ control switches between **Ask** and **Sources**; Sources is paginated. A chat a
 rather than `--danger` per ADR-0021). Shows what was searched, what came back and at what scores,
 why it fell below threshold, whether a rewrite was attempted, and what to try instead.
 
-**Traces** (`/traces`) — recent queries, drill into one, everything in §9.
+**Traces** (`/traces`) — recent queries, drill into one, everything in §9. A rated answer carries
+its verdict on the collapsed row, so the ones worth opening are visible without opening anything,
+and spells it out with its timestamp when expanded. **Read-only here on purpose**: rating happens
+beside the answer, where the reader has just inspected the sources and is the only person qualified
+to judge it. A control on this page would collect verdicts on questions nobody re-read.
+
+**Not-found state** — two of them, both inside the shell so the sidebar and the theme survive.
+`/c/<unknown id>` says the id did not resolve and that it may have been deleted; any other unmatched
+URL gets the general one. Next's built-in 404 is replaced rather than styled: it drops the
+navigation, leaving the back button as the only way out, and it reads `prefers-color-scheme` rather
+than this app's `data-theme`, so a reader with the toggle on Dark gets a white page.
 
 **Failure state** — a third surface, distinct from both. A refusal uses `--warn` because it is
 the system working; a *failure* uses `--danger` because it is not. Provider errors are typed

@@ -1,6 +1,7 @@
 import { getDb } from "@/lib/db";
 import { getQdrantUrl } from "@/lib/env";
 import { createClient, deleteByCollection } from "@/lib/rag/vector";
+import { summaryFingerprint } from "@/lib/summary";
 
 export async function GET(_request: Request, ctx: RouteContext<"/api/collections/[id]">) {
   const { id } = await ctx.params;
@@ -17,6 +18,24 @@ export async function GET(_request: Request, ctx: RouteContext<"/api/collections
   });
   if (!collection) return Response.json({ error: "No such collection." }, { status: 404 });
 
+  /**
+   * The stored summary rides along with the collection instead of getting its
+   * own endpoint, for two reasons. The view already fetches this on open and
+   * again after every ingest, so there is no second round trip and no second
+   * loading state; and because ingest triggers the same refetch, a summary
+   * *stops* being served in the same breath as the upload that invalidated it.
+   *
+   * `summary` is null unless the fingerprint still matches, so a caller cannot
+   * render a stale one by forgetting to check. `summaryStale` distinguishes
+   * "never summarised" from "summarised, then the documents changed" — the UI
+   * says different things about those, and only this route can tell them apart.
+   */
+  const readyIds = collection.documents
+    .filter((document) => document.status === "ready")
+    .map((document) => document.id);
+  const current =
+    collection.summary !== null && collection.summaryFingerprint === summaryFingerprint(readyIds);
+
   return Response.json({
     id: collection.id,
     name: collection.name,
@@ -25,6 +44,8 @@ export async function GET(_request: Request, ctx: RouteContext<"/api/collections
     isDefault: collection.isDefault,
     chunkTokens: collection.chunkTokens,
     topK: collection.topK,
+    summary: current ? collection.summary : null,
+    summaryStale: collection.summary !== null && !current,
     documents: collection.documents.map((document) => ({
       id: document.id,
       filename: document.filename,

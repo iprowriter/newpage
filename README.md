@@ -135,10 +135,7 @@ The supporting passage opens with the matching sentence marked. If no single pas
 you highlighted, it says that instead of pointing at a best guess. Section 6 is honest about how
 well this works.
 
-**Refusal as a designed feature.** When retrieval comes back weak, the answer surface changes. It
-tells you what was searched, how many passages came back, what the best score was, whether it
-tried rewriting your question, and what to try instead. It is coloured as a caution, not as an
-error, because refusing correctly is the system working.
+**Refusal  
 
 **Failures look different from refusals.** Provider problems (rate limits, a rejected key, a
 retired model, a network fault) are typed, retried with backoff where retrying could help, and
@@ -148,6 +145,10 @@ to run the question locally.
 **Help getting started.** After the first upload, the collection can summarise itself, and offers
 three starter questions generated from the actual documents. Each answer suggests two follow up
 questions, which come back in the same model call as the answer rather than costing a second one.
+The summary is generated only when asked for, but it is kept once it exists: it comes back with the
+collection and stays above the thread, collapsed, with a "Summarise again" button. Add or remove a
+document and it is withheld rather than shown stale, because it now describes a collection that is
+no longer there (ADR-0026).
 
 **Your thread is still there when you come back.** Questions and answers for a collection are kept,
 so switching to another collection and returning does not wipe what you have already asked.

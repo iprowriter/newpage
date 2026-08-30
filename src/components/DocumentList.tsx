@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { Spinner } from "./Spinner";
 import type { DocumentSummary } from "./types";
 
 const STATUS_LABEL: Record<DocumentSummary["status"], string> = {
@@ -75,8 +76,12 @@ export function DocumentList({
             </span>
           </span>
 
+          {/* The badge spins while the row is still being ingested. Reached
+              whenever the list is open across an ingest — another tab, or a
+              refresh mid-upload — and it is the difference between "working" and
+              "stuck on Queued". */}
           <span
-            className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] ${
+            className={`flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] ${
               document.status === "ready"
                 ? "bg-surface-soft text-muted"
                 : document.status === "processing" || document.status === "pending"
@@ -84,6 +89,9 @@ export function DocumentList({
                   : "bg-refusal-tint text-refusal"
             }`}
           >
+            {(document.status === "processing" || document.status === "pending") && (
+              <Spinner size={11} />
+            )}
             {STATUS_LABEL[document.status]}
           </span>
 

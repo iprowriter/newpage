@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+import { ThumbIcon } from "./icons";
+
 interface Trace {
   id: string;
   collection: string;
@@ -20,6 +22,9 @@ interface Trace {
   generationMs: number | null;
   promptTokens: number | null;
   outputTokens: number | null;
+  feedback: "up" | "down" | null;
+  feedbackNote: string | null;
+  feedbackAt: string | null;
   createdAt: string;
 }
 
@@ -52,9 +57,9 @@ export function TracesView() {
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-8">
-      <h1 className="text-[22px] font-medium text-ink">Traces</h1>
+      <h1 className="text-[22px] font-medium text-ink">Traces (Observability)</h1>
       <p className="mt-1 text-sm leading-relaxed text-body">
-        Every question, what came back, and what it cost. Refusals included — they are the
+        Every question, what came back, and what it cost. Refusals included; they are the
         interesting ones.
       </p>
 
@@ -111,6 +116,26 @@ export function TracesView() {
                       <span className="font-mono">{trace.model}</span>
                     </span>
                   </span>
+
+                  {/* Read-only, and on the collapsed row on purpose: a rated
+                      answer is the one worth opening, so the verdict has to be
+                      visible without opening anything. Rating happens beside the
+                      answer, where the reader has just seen the sources — moving
+                      the control here would invite verdicts on a question nobody
+                      re-read (ADR-0016). */}
+                  {trace.feedback && (
+                    <span
+                      title={trace.feedback === "up" ? "Rated helpful" : "Rated not helpful"}
+                      className={`mt-0.5 shrink-0 ${
+                        trace.feedback === "up" ? "text-success" : "text-danger"
+                      }`}
+                    >
+                      <span className="sr-only">
+                        {trace.feedback === "up" ? "Rated helpful" : "Rated not helpful"}
+                      </span>
+                      <ThumbIcon verdict={trace.feedback} />
+                    </span>
+                  )}
                 </button>
 
                 {open && (
@@ -125,6 +150,27 @@ export function TracesView() {
                       <Stat label="Provider" value={trace.provider} />
                       <Stat label="Embeddings" value={trace.embeddingModel} />
                     </dl>
+
+                    {trace.feedback && (
+                      <p className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted">
+                        <span
+                          className={trace.feedback === "up" ? "text-success" : "text-danger"}
+                        >
+                          <ThumbIcon verdict={trace.feedback} size={12} />
+                        </span>
+                        <span className="text-body">
+                          Reader rated this {trace.feedback === "up" ? "helpful" : "not helpful"}
+                        </span>
+                        {trace.feedbackAt && (
+                          <span className="tnum">
+                            {new Date(trace.feedbackAt).toLocaleString()}
+                          </span>
+                        )}
+                        {trace.feedbackNote && (
+                          <span className="w-full text-body">{trace.feedbackNote}</span>
+                        )}
+                      </p>
+                    )}
 
                     {trace.rewrittenAs && (
                       <p className="mt-3 text-xs text-muted">

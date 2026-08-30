@@ -35,5 +35,6 @@ keeps the reasoning mine rather than something backfilled by a model.
 | [0023](0023-ship-a-trace-viewer.md) | Ship a trace viewer, so the OTel claim is checkable | Accepted |
 | [0024](0024-span-level-attribution.md) | Span-level attribution: lexical, client-side, allowed to decline | Accepted |
 | [0025](0025-conversation-history-from-traces.md) | Conversation history is read back from the trace table | Accepted |
+| [0026](0026-summary-is-remembered-not-regenerated.md) | The collection summary is remembered, not regenerated | Accepted |
 
 Use [`TEMPLATE.md`](TEMPLATE.md) for new ones.

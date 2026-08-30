@@ -2,6 +2,8 @@
 
 import { useCallback, useLayoutEffect, useRef } from "react";
 
+import { MAX_QUESTION_CHARS, QUESTION_COUNTER_FROM } from "@/lib/limits";
+
 const MAX_ROWS = 3;
 
 /**
@@ -16,6 +18,13 @@ const MAX_ROWS = 3;
  * a bordered container, so a ring drawn on the field itself lands inside that
  * border and reads as a second, smaller box — the affordance belongs on the edge
  * the eye already treats as the control.
+ *
+ * Length is capped at `MAX_QUESTION_CHARS` by the field's own `maxLength`, which
+ * also truncates a paste rather than accepting it and failing at submit. The
+ * counter appears only in the last stretch before the limit: shown from the first
+ * character it is noise on every question, and shown never, typing simply stops
+ * working with nothing on screen to say why. `/api/query` enforces the same
+ * number — this is the convenience, not the control.
  */
 export function ChatInput({
   value,
@@ -61,6 +70,7 @@ export function ChatInput({
         ref={ref}
         rows={1}
         value={value}
+        maxLength={MAX_QUESTION_CHARS}
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={(event) => {
           // Enter sends, Shift+Enter breaks the line. The composer only grows to
@@ -75,6 +85,18 @@ export function ChatInput({
         disabled={disabled}
         className="focus-ring-off scroll-quiet max-h-40 min-w-0 flex-1 resize-none border-0 bg-transparent py-1 text-[15px] leading-[1.5] text-ink outline-none placeholder:text-muted disabled:cursor-not-allowed"
       />
+      {value.length >= QUESTION_COUNTER_FROM && (
+        <span
+          className={`tnum mb-1.5 shrink-0 text-[11px] ${
+            value.length >= MAX_QUESTION_CHARS ? "text-refusal" : "text-muted"
+          }`}
+          // Announced only when it changes to the limit; a per-keystroke count
+          // read aloud is worse than silence.
+          aria-live={value.length >= MAX_QUESTION_CHARS ? "polite" : "off"}
+        >
+          {value.length}/{MAX_QUESTION_CHARS}
+        </span>
+      )}
       <button
         type="button"
         onClick={onSubmit}

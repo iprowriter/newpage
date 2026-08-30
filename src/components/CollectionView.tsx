@@ -11,6 +11,7 @@ import { FailureCard } from "./FailureCard";
 import { PromoteChat } from "./PromoteChat";
 import { ScrollAffordance } from "./ScrollAffordance";
 import { SegmentedTabs } from "./SegmentedTabs";
+import { Spinner } from "./Spinner";
 import { Thinking } from "./Thinking";
 import type { DocumentSummary, Exchange, QueryFailure } from "./types";
 import { useProvider } from "./useProvider";
@@ -33,18 +34,36 @@ export function CollectionView({
   const [exchanges, setExchanges] = useState<Exchange[]>([]);
   const [question, setQuestion] = useState("");
   const [asking, setAsking] = useState(false);
-  const [uploading, setUploading] = useState<string | null>(null);
+  // The file *and* its place in the batch: dropping four documents and watching
+  // the name change four times with no count reads as one long stall.
+  const [uploading, setUploading] = useState<{ name: string; index: number; total: number } | null>(
+    null,
+  );
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [truncated, setTruncated] = useState(false);
+  // Held here rather than inside CollectionSummary because the same fetch that
+  // refreshes the document list is what decides whether the stored summary still
+  // describes it. `stale` is the difference between "never summarised" and
+  // "summarised, then the documents changed", which the card words differently.
+  const [summary, setSummary] = useState<string | null>(null);
+  const [summaryStale, setSummaryStale] = useState(false);
   const { provider } = useProvider();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     const response = await fetch(`/api/collections/${collectionId}`);
     if (!response.ok) return;
-    const data = (await response.json()) as { documents: DocumentSummary[] };
+    const data = (await response.json()) as {
+      documents: DocumentSummary[];
+      summary: string | null;
+      summaryStale: boolean;
+    };
     setDocuments(data.documents);
+    // The route serves `summary` only while its fingerprint still matches, so an
+    // ingest silently retires the old one on the very refetch it triggers.
+    setSummary(data.summary);
+    setSummaryStale(data.summaryStale);
   }, [collectionId]);
 
   /**
@@ -75,6 +94,11 @@ export function CollectionView({
     setTab("ask");
     setHistoryLoaded(false);
     setTruncated(false);
+    // Cleared rather than left to be overwritten: `load()` is a second request,
+    // and a summary of the collection you just navigated away from is exactly
+    // the stale description the fingerprint exists to prevent.
+    setSummary(null);
+    setSummaryStale(false);
     void load();
 
     void (async () => {
@@ -205,11 +229,15 @@ export function CollectionView({
   };
 
   const upload = async (files: FileList | null) => {
-    if (!files?.length) return;
+    // Ingestion is inline and can take a while (specs.md §10), so a second drop
+    // while the first is still running is easy to do by accident — and it would
+    // have two loops writing `uploading` over each other.
+    if (!files?.length || uploading) return;
     setUploadError(null);
 
-    for (const file of Array.from(files)) {
-      setUploading(file.name);
+    const batch = Array.from(files);
+    for (const [index, file] of batch.entries()) {
+      setUploading({ name: file.name, index: index + 1, total: batch.length });
       try {
         const form = new FormData();
         form.append("file", file);
@@ -274,13 +302,28 @@ export function CollectionView({
                 )}
               </div>
 
+              {/* Above the thread and outside the empty-thread branch, so it is
+                  still there to go back to once the conversation starts —
+                  orientation comes before interrogation for someone who did not
+                  build this, but it does not stop mattering afterwards. */}
+              {historyLoaded && ready.length > 0 && (
+                <CollectionSummary
+                  collectionId={collectionId}
+                  kind={kind}
+                  summary={summary}
+                  stale={summaryStale}
+                  provider={provider}
+                  startOpen={exchanges.length === 0}
+                  onSummary={(text) => {
+                    setSummary(text);
+                    setSummaryStale(false);
+                  }}
+                />
+              )}
+
               {historyLoaded && exchanges.length === 0 && ready.length > 0 && (
                 <div>
-                  {/* Offered before the questions, because orientation comes
-                      before interrogation for someone who did not build this. */}
-                  <CollectionSummary collectionId={collectionId} kind={kind} />
-
-                  <p className="mt-6 text-[15px] text-ink">What do you want to know?</p>
+                  <p className="text-[15px] text-ink">What do you want to know?</p>
                   {starters.length > 0 && (
                     <div className="mt-3 flex flex-col items-start gap-2">
                       {starters.map((starter) => (
@@ -349,17 +392,26 @@ export function CollectionView({
   );
 }
 
+/**
+ * The drop target, which doubles as the indexing indicator.
+ *
+ * While a file is being ingested the zone takes the accent tint and stops
+ * accepting pointer events — the same state that says "working" also removes the
+ * only way to start a second, overlapping upload, rather than relying on a guard
+ * the reader cannot see.
+ */
 function UploadZone({
   uploading,
   onFiles,
 }: {
-  uploading: string | null;
+  uploading: { name: string; index: number; total: number } | null;
   onFiles: (files: FileList | null) => void;
 }) {
   const [dragging, setDragging] = useState(false);
 
   return (
     <label
+      aria-busy={uploading !== null}
       onDragOver={(event) => {
         event.preventDefault();
         setDragging(true);
@@ -370,10 +422,12 @@ function UploadZone({
         setDragging(false);
         onFiles(event.dataTransfer.files);
       }}
-      className={`flex cursor-pointer items-center justify-center rounded-xl border border-dashed px-4 py-4 text-center text-[13px] transition-colors ${
-        dragging
-          ? "border-accent bg-accent-tint text-accent-on-tint"
-          : "border-line bg-surface text-muted hover:border-accent"
+      className={`flex items-center justify-center rounded-xl border border-dashed px-4 py-4 text-center text-[13px] transition-colors ${
+        uploading
+          ? "pointer-events-none border-accent bg-accent-tint text-accent-on-tint"
+          : dragging
+            ? "cursor-pointer border-accent bg-accent-tint text-accent-on-tint"
+            : "cursor-pointer border-line bg-surface text-muted hover:border-accent"
       }`}
     >
       <input
@@ -381,9 +435,22 @@ function UploadZone({
         multiple
         accept=".pdf,.txt,.md,application/pdf,text/plain,text/markdown"
         className="sr-only"
+        disabled={uploading !== null}
         onChange={(event) => onFiles(event.target.files)}
       />
-      {uploading ? `Indexing ${uploading}…` : "Drop a PDF, text or Markdown file, or click to choose"}
+      {uploading ? (
+        <span className="flex min-w-0 items-center gap-2" role="status">
+          <Spinner />
+          <span className="truncate">Indexing {uploading.name}…</span>
+          {uploading.total > 1 && (
+            <span className="tnum shrink-0 opacity-70">
+              {uploading.index} of {uploading.total}
+            </span>
+          )}
+        </span>
+      ) : (
+        "Drop a PDF, text or Markdown file, or click to choose"
+      )}
     </label>
   );
 }

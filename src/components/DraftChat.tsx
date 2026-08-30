@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { collectionsChanged } from "./collectionsBus";
+import { Spinner } from "./Spinner";
 
 /**
  * A chat that does not exist yet.
@@ -80,10 +81,13 @@ export function DraftChat() {
             setDragging(false);
             void start(event.dataTransfer.files);
           }}
-          className={`mt-6 flex cursor-pointer items-center justify-center rounded-xl border border-dashed px-4 py-10 text-center text-[13px] transition-colors ${
-            dragging
-              ? "border-accent bg-accent-tint text-accent-on-tint"
-              : "border-line bg-surface text-muted hover:border-accent"
+          aria-busy={busy !== null}
+          className={`mt-6 flex items-center justify-center rounded-xl border border-dashed px-4 py-10 text-center text-[13px] transition-colors ${
+            busy
+              ? "pointer-events-none border-accent bg-accent-tint text-accent-on-tint"
+              : dragging
+                ? "cursor-pointer border-accent bg-accent-tint text-accent-on-tint"
+                : "cursor-pointer border-line bg-surface text-muted hover:border-accent"
           }`}
         >
           <input
@@ -93,7 +97,14 @@ export function DraftChat() {
             disabled={busy !== null}
             onChange={(event) => void start(event.target.files)}
           />
-          {busy ?? "Drop a PDF, text or Markdown file, or click to choose"}
+          {busy ? (
+            <span className="flex min-w-0 items-center gap-2" role="status">
+              <Spinner />
+              <span className="truncate">{busy}</span>
+            </span>
+          ) : (
+            "Drop a PDF, text or Markdown file, or click to choose"
+          )}
         </label>
 
         {error && (

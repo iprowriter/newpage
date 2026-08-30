@@ -4,6 +4,7 @@ import { buildAnswerGraph } from "@/lib/rag/graph";
 import { RAG, withSpan } from "@/lib/rag/telemetry";
 import { isProviderError } from "@/lib/rag/providers/errors";
 import { graphDeps, resolveProvider } from "@/lib/rag-runtime";
+import { MAX_QUESTION_CHARS } from "@/lib/limits";
 
 /**
  * Ask a question, scoped to one collection.
@@ -24,6 +25,20 @@ export async function POST(request: Request) {
 
   if (!body.collectionId || !body.question?.trim()) {
     return Response.json({ error: "collectionId and question are required." }, { status: 400 });
+  }
+
+  // Enforced here, not only in the composer. The textarea's `maxLength` is a
+  // convenience for the person typing; this is the actual bound, and it is the
+  // one that holds for anything posting to the route directly. Checked before
+  // the collection lookup so an oversized body costs no database round trip.
+  const length = body.question.trim().length;
+  if (length > MAX_QUESTION_CHARS) {
+    return Response.json(
+      {
+        error: `A question can be at most ${MAX_QUESTION_CHARS} characters — this one is ${length}. Ask the parts separately; a long multi-part question retrieves worse than any of its parts alone.`,
+      },
+      { status: 400 },
+    );
   }
 
   const db = getDb();

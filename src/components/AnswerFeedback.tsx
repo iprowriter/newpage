@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+import { ThumbIcon } from "./icons";
+
 type Rating = "up" | "down";
 
 /**
@@ -51,17 +53,17 @@ export function AnswerFeedback({
     <span className="flex items-center gap-0.5">
       <Button
         label="Helpful"
+        verdict="up"
         active={rating === "up"}
         activeClass="text-success"
         onClick={() => send("up")}
-        path="M4.6 12.4V6.9m0 5.5h5.1a1.2 1.2 0 0 0 1.2-1l.7-4.1a1.2 1.2 0 0 0-1.2-1.4H8.2l.3-2.3a1.1 1.1 0 0 0-2.1-.6L4.6 6.9m0 5.5H2.8V6.9h1.8"
       />
       <Button
         label="Not helpful"
+        verdict="down"
         active={rating === "down"}
         activeClass="text-danger"
         onClick={() => send("down")}
-        path="M9.4 1.6v5.5m0-5.5H4.3a1.2 1.2 0 0 0-1.2 1l-.7 4.1a1.2 1.2 0 0 0 1.2 1.4h2.2l-.3 2.3a1.1 1.1 0 0 0 2.1.6l1.8-3.9m0-5.5h1.8v5.5H9.4"
       />
       {failed && <span className="ml-1 text-[11px] text-muted">not saved</span>}
     </span>
@@ -70,16 +72,16 @@ export function AnswerFeedback({
 
 function Button({
   label,
+  verdict,
   active,
   activeClass,
   onClick,
-  path,
 }: {
   label: string;
+  verdict: "up" | "down";
   active: boolean;
   activeClass: string;
   onClick: () => void;
-  path: string;
 }) {
   return (
     <button
@@ -90,15 +92,7 @@ function Button({
       title={label}
       className={`rounded-md p-1 ${active ? activeClass : "text-muted hover:text-ink"}`}
     >
-      <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden>
-        <path
-          d={path}
-          stroke="currentColor"
-          strokeWidth="1.3"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
+      <ThumbIcon verdict={verdict} />
     </button>
   );
 }
