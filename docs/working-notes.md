@@ -43,7 +43,7 @@ to end, containerised, with measured numbers.
 | Corpus | 8 FDA guidance PDFs, 778 chunks, two collections |
 | Stack | Next.js 16 · Postgres · Qdrant · Ollama (embeddings) · Jaeger |
 | Providers | Gemini (default, pinned) · Ollama (local) |
-| Tests | 40, no network, under 3s |
+| Tests | 48, no network, under 3s |
 | Eval | 26 cases — hosted 26/26; local 12/26 (all answerable false-refused) |
 | Cold start | `docker compose up` verified from empty volumes |
 

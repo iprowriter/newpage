@@ -19,8 +19,10 @@ rather than a trivial one (ADR-0017).
 
 **In:** collections *and chats* (ADR-0022), PDF/text ingestion, structure-aware chunking, local
 embeddings, filtered vector retrieval, grounded generation with citations, refusal on weak
-retrieval, collection summaries, answer feedback, typed provider errors with retry, an in-app
-trace viewer plus OpenTelemetry to Jaeger, an eval harness, Docker Compose.
+retrieval, span-level attribution from a highlighted claim back to its passage (ADR-0024),
+persistent conversation history per collection (ADR-0025), collection summaries, answer feedback,
+typed provider errors with retry, an in-app trace viewer plus OpenTelemetry to Jaeger, an eval
+harness, Docker Compose.
 
 **Out, and stated in the README:** auth and real multi-tenancy, `.docx`/OCR/scanned PDFs
 (ADR-0018), voice input (ADR-0005), conversation memory beyond the current thread, incremental
@@ -73,7 +75,7 @@ pipeline headless with no server (ADR-0007).
 | `collections` | id, name, **kind (`collection` \| `chat`)**, description, retrieval config, cached summary + document fingerprint |
 | `documents` | id, collection_id, filename, mime, page count, ingest status, error, timestamps |
 | `chunks` | id, document_id, collection_id, chunk index, page, heading path, char offsets, display text |
-| `query_traces` | one row per query — see §9 — including human feedback (up/down + note) |
+| `query_traces` | one row per query — see §9 — including which sources the answer cited and human feedback (up/down + note) |
 | `eval_runs` / `eval_results` | one row per run and per question — see §8 |
 
 `chunks` holds the **display text** and positional metadata. Qdrant holds the vector and a
@@ -158,6 +160,10 @@ These are the behaviours the submission is actually evidencing.
 4. **Every citation resolves** to a real chunk in the answering collection. A citation that
    doesn't resolve is a bug, not a formatting quirk.
 5. **Pinned model IDs.** No floating aliases anywhere (ADR-0014).
+6. **No threshold is a guess.** Every constant that decides an outcome ships with the script that
+   measured it (`npm run calibrate`, `npm run calibrate:attribution`) and the distribution is
+   recorded in its ADR. Set from fixtures rather than the real corpus, a threshold is set from
+   text that shares its own vocabulary; ADR-0024 records where that went wrong.
 
 ## 8. Eval harness
 
@@ -250,6 +256,7 @@ named as such in productionisation.
 | `POST /api/collections/:id/documents` | Upload and ingest |
 | `DELETE /api/documents/:id` | Delete — see below |
 | `POST /api/query` | Ask, scoped to a collection. Streams. |
+| `GET /api/collections/:id/history` | Past questions and answers, rebuilt from `query_traces` (ADR-0025) |
 | `GET /api/traces` · `GET /api/traces/:id` | Trace viewer data |
 
 **Deletion across two stores** (closes open question 11): delete Qdrant points by filter first,
@@ -281,6 +288,12 @@ control switches between **Ask** and **Sources**; Sources is paginated. A chat a
   does not look narrower than it is.
 - Ask, or click a suggestion. Answer streams in with inline citations; each citation opens the
   source chunk with heading path and page.
+- Highlight any sentence of an answer and a **"Where is this from?"** control traces it back to the
+  passage it came from, marked in place (ADR-0024). Lexical matching, so it reports `strong`,
+  `closest match`, or that no single passage supports the selection. Never the word "citation".
+- The thread **persists per collection** (ADR-0025). Leaving and returning restores the questions,
+  their answers, their sources and any rating given, read back from the same rows the trace viewer
+  uses. Capped at the 20 most recent, with a pointer to `/traces` for the rest.
 - Under every answer: the model that produced it and its latency, an expandable **how did I get
   this** (retrieved chunks with scores, grade decision, whether rewrite-retry fired), and
   **thumbs up/down** — placed there because provenance and judgement are the same act, and each
@@ -318,8 +331,21 @@ Not coverage theatre. Four things that fail silently:
 Plus **deletion ordering** (§10) — asserted by recording call *sequence*, since the failure it
 guards against is a later edit that looks harmless — **citation resolution** (§7.4), and the
 **retry policy** in both directions: that it retries transient failures up to a bound, and that it
-does *not* retry a rejected key. The LLM is mocked at the provider seam (ADR-0003), so all 29 tests
-run in under three seconds with no network and no cost.
+does *not* retry a rejected key.
+
+Two later features added their own, both for the same reason: they fail quietly rather than loudly.
+
+5. **Attribution bands** — that surviving wording scores as `strong`, that a paraphrase and a claim
+   assembled from two passages both land in `partial` because lexical overlap cannot separate them
+   (ADR-0024), and that an unsupported claim is declined outright rather than pointed somewhere.
+6. **History reconstruction** (ADR-0025) — that chunk text is rejoined onto sources the trace
+   stored only ids for, that a passage whose document has since been deleted is marked unavailable
+   rather than dropped, that the conversation comes back oldest-first from a newest-first query,
+   and that `error` traces stay out of the thread. A broken rejoin returns empty passages without
+   throwing, which is exactly the kind of failure that reaches a screenshot.
+
+The LLM is mocked at the provider seam (ADR-0003), so all 48 tests run in under three seconds with
+no network and no cost.
 
 ## 12. Configuration
 

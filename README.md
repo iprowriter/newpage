@@ -70,7 +70,7 @@ is a useful answer when the hosted model is rate limited.
 ### Useful commands
 
 ```bash
-npm test                            40 tests, no network, about one second
+npm test                            48 tests, no network, about one second
 npm run typecheck                   tsc, plus Next route type generation
 npm run lint                        includes the import rule described in section 4
 npm run eval                        the full quality harness
@@ -447,8 +447,9 @@ Stated here rather than hidden, because you said you would rather see them ackno
   that keeps `next` out of the retrieval core is what makes everything else testable.
 - **Tests aimed at things that fail silently**, not at a coverage number. Chunk boundaries, the
   two text representations, collection isolation, the bounded retry, deletion ordering across two
-  stores, citation resolution, retry policy in both directions, and the attribution bands. Forty
-  tests, no network, about a second, because a slow suite does not get run.
+  stores, citation resolution, retry policy in both directions, the attribution bands, and history
+  reconstruction. Forty eight tests, no network, about a second, because a slow suite does not get
+  run.
 - **The model is mocked at the provider seam**, so tests cost nothing and never flake on a network.
 - **Containerised end to end**, with a cold start verified from empty volumes.
 - **Typed errors at the boundary.** Provider failures carry a kind and whether retrying is worth
