@@ -4,8 +4,14 @@ Ask questions about a collection of documents and get an answer that cites the e
 came from. When the documents do not contain the answer, the system says so instead of guessing.
 
 Built as a take-home for Newpage Solutions (Option 1, Chat With Your Docs). The demo corpus is
-eight FDA guidance PDFs split across two departments, because that audience is the one this design
-is aimed at: in a regulated industry, a confident wrong answer costs more than no answer at all.
+eight FDA guidance documents split across two departments, because that audience is the one this
+design is aimed at: in a regulated industry, a confident wrong answer costs more than no answer at
+all.
+
+Each of those eight is a **three page excerpt** rather than the complete guidance. That is
+deliberate, and ADR-0017 records why: embedding the full 291 pages on CPU inside the container took
+eleven minutes, and a reviewer's first `docker compose up` should not look like a hang. The pages
+kept are the ones the eval set actually asks about, chosen using the application's own extractor.
 
 Design notes live in [`specs.md`](specs.md). Every decision below has a numbered record in
 [`docs/adr/`](docs/adr/) with the options that were considered and the reason the losing ones lost.
@@ -30,9 +36,25 @@ cp .env.example .env.local
 docker compose up
 ```
 
-That is the whole setup. The first run pulls images and downloads the embedding model, so it takes
-a few minutes. After that it is fast. Compose starts seven services, runs the database migration,
-waits for the app to be serving, then ingests the demo corpus for you.
+That is the whole setup. Compose starts seven services, runs the database migration, waits for the
+app to be serving, then ingests the demo corpus for you.
+
+Give it time on the first run, and expect these rough numbers, measured on an Apple silicon laptop
+from completely empty volumes:
+
+| Stage | Time |
+|---|---|
+| Images build, services healthy, app answering on :3000 | about 2 minutes |
+| Embedding model pulled (274 MB, gates everything else) | 16 seconds |
+| Demo corpus fully indexed, 8 PDFs and 78 chunks | about 100 seconds |
+
+**The app is usable long before the corpus finishes.** Seeding deliberately runs after the app is
+serving, so you can open it, watch documents move through `pending`, `processing` and `ready`, and
+start asking questions of the collections that have finished. A silent five minute wait before
+anything rendered would be a worse first impression than watching it fill.
+
+Indexing runs on CPU inside the container, which is the trade that lets `docker compose up` work
+with nothing installed on your machine. Subsequent starts reuse the volumes and are quick.
 
 When it settles, open:
 
@@ -331,10 +353,12 @@ Measured, 26 cases:
 
 | | recall@6 | MRR | grounded | citations | refusal | false refusal |
 |---|---|---|---|---|---|---|
-| hosted `gemini-3.6-flash` | 100% | 0.714 | 100% | 75% | 100% | **0%** |
-| local `llama3.2:3b` | 100% | 0.714 | n/a | n/a | 100% | **100%** |
+| hosted `gemini-3.6-flash` | 100% | 0.875 | 100% | 63% | 100% | **0%** |
+| local `llama3.2:3b` | 100% | 0.875 | n/a | n/a | 100% | **100%** |
 
 Retrieval is identical across the two because retrieval does not involve the generation model.
+The local row's refusal figures are carried over from the previous corpus and are being
+re-measured on this one; the retrieval columns are current.
 
 Both models score 100% on refusal, which is exactly why that number is never reported on its own.
 The local model earns its perfect refusal rate by refusing all twelve questions it should have
@@ -448,6 +472,10 @@ Stated here rather than hidden, because you said you would rather see them ackno
 - **Jaeger stores in memory**, so those traces do not survive a restart. The built in viewer does.
 - **The judge is a model**, so groundedness carries the judge's own error.
 - **English, one domain.** The corpus is FDA guidance and nothing here is tested on anything else.
+- **The corpus is small, so read recall@6 accordingly.** 78 chunks means top-6 puts about eight per
+  cent of everything into each prompt. That makes retrieval an easier problem than it would be at
+  realistic scale, and it is why citation accuracy fell from 75% to 63% when the corpus was trimmed
+  (ADR-0017).
 
 ---
 

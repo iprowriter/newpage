@@ -40,12 +40,12 @@ to end, containerised, with measured numbers.
 
 | | |
 |---|---|
-| Corpus | 8 FDA guidance PDFs, 778 chunks, two collections |
+| Corpus | 8 FDA guidance excerpts (3 pages each), 78 chunks, two collections |
 | Stack | Next.js 16 · Postgres · Qdrant · Ollama (embeddings) · Jaeger |
 | Providers | Gemini (default, pinned) · Ollama (local) |
 | Tests | 48, no network, under 3s |
 | Eval | 26 cases — hosted 26/26; local 12/26 (all answerable false-refused) |
-| Cold start | `docker compose up` verified from empty volumes |
+| Cold start | verified twice from empty volumes, most recently 2026-08-30 after the trace_citations migration |
 
 Everything below is still to do, and the first item matters most.
 

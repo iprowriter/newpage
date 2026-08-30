@@ -194,8 +194,11 @@ Every run persists to Postgres with pinned model id, chunk config and retrieval 
 
 | | recall@6 | MRR | grounded | citations | refusal | false refusal |
 |---|---|---|---|---|---|---|
-| hosted `gemini-3.6-flash` | 100% | 0.714 | 100% | 75% | 100% | **0%** |
-| local `llama3.2:3b` | 100% | 0.714 | — | — | 100% | **100%** |
+| hosted `gemini-3.6-flash` | 100% | 0.875 | 100% | 63% | 100% | **0%** |
+| local `llama3.2:3b` | 100% | 0.875 | — | — | 100% | **100%** |
+
+The local row's refusal figures are carried over from the previous corpus and are being
+re-measured on this one; its retrieval columns are current.
 
 Retrieval is identical because it does not involve the generation model. Both score a perfect
 refusal rate — which is precisely why refusal is never reported alone: the local model earns its

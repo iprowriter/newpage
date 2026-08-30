@@ -107,11 +107,22 @@ export const CASES: EvalCase[] = [
     expect: { file: "electronic-source-data-clinical-investigations.pdf", contains: ["Examples of data originators"] },
   },
   {
-    id: "co-ehr-purpose",
+    id: "co-ehr-multi-site",
     collection: "Clinical Operations",
-    question: "What is the purpose of the guidance on electronic health record data?",
+    question: "Can data from another health care institution's EHR system be sent to the sponsor?",
     kind: "answerable",
-    expect: { file: "electronic-health-record-data-clinical-investigations.pdf", contains: ["interoperability of EHR"] },
+    expect: {
+      file: "electronic-health-record-data-clinical-investigations.pdf",
+      contains: ["data sharing agreements are in place"],
+    },
+    answerMustContain: ["data sharing agreement"],
+    note:
+      "Replaces co-ehr-purpose, which asked what the guidance was *for*. That question was " +
+      "answered only by the document's introduction, which the corpus no longer carries " +
+      "(ADR-0017: documents are excerpts). It was also mislabelled from the start — it asked " +
+      "about purpose while expecting a phrase about interoperability, so its question terms " +
+      "never pointed at the chunk it was grading against, and it passed on the full corpus " +
+      "for the wrong reason. This one asks a single fact stated plainly in section D.",
   },
   {
     id: "co-consent-documented",
@@ -136,7 +147,14 @@ export const CASES: EvalCase[] = [
     collection: "Clinical Operations",
     question: "What should a sponsor do about noncompliance with the protocol?",
     kind: "answerable",
-    expect: { file: "e6r3-good-clinical-practice.pdf", contains: ["oncompliance"] },
+    expect: {
+      file: "e6r3-good-clinical-practice.pdf",
+      // Was just "oncompliance", which appears on nine pages of the full
+      // document — that graded whether the right *file* came back, not the right
+      // passage, so it could pass on a chunk that merely mentions the word. This
+      // is the sentence from section 3.12 that actually answers the question.
+      contains: ["appropriate and proportionate action by the sponsor to secure compliance"],
+    },
   },
 
   // ---- Negative: answerable, but in the OTHER collection -------------------
