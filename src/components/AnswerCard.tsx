@@ -103,7 +103,7 @@ export function AnswerCard({
           {showProvenance ? "Hide sources" : "How did I get this?"}
         </button>
         <span aria-hidden>·</span>
-        <AnswerFeedback traceId={payload.traceId} />
+        <AnswerFeedback traceId={payload.traceId} initial={payload.feedback ?? null} />
       </div>
 
       {showProvenance && (
@@ -199,10 +199,10 @@ function Answer({ payload }: { payload: AnswerPayload }) {
         <span aria-hidden className="mt-1 w-0.5 shrink-0 rounded-full bg-accent/40" />
         <p className="whitespace-pre-wrap text-[15px] leading-[1.65] text-ink">{payload.answer}</p>
       </div>
-      {payload.citations.length > 0 && (
+      {(payload.citations?.length ?? 0) > 0 && (
         <p className="mt-3.5 border-t-[0.5px] border-line pt-2.5 text-xs text-muted">
           Drawn from{" "}
-          {payload.citations.map((n, i) => {
+          {(payload.citations ?? []).map((n, i) => {
             const source = payload.sources.find((s) => s.n === n);
             return (
               <span key={n}>

@@ -24,7 +24,8 @@ export function SourceList({
   highlight,
 }: {
   sources: Source[];
-  cited: number[];
+  /** Defaulted: an older trace can arrive without it, and that is not worth a crash. */
+  cited?: number[];
   highlight?: SourceHighlight | null;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
@@ -46,7 +47,7 @@ export function SourceList({
   return (
     <ul className="flex flex-col gap-1.5">
       {sources.map((source) => {
-        const used = cited.includes(source.n);
+        const used = (cited ?? []).includes(source.n);
         const open = openId === source.chunkId;
         return (
           <li key={source.chunkId} className="rounded-lg border-[0.5px] border-line bg-surface shadow-xs">
@@ -76,7 +77,13 @@ export function SourceList({
               </span>
               <ScoreBar score={source.score} />
             </button>
-            {open && (
+            {open && source.available === false && (
+              <p className="border-t-[0.5px] border-line px-3 py-2.5 text-[13px] leading-relaxed text-muted">
+                This passage is no longer available: the document it came from has been deleted
+                since this answer was written.
+              </p>
+            )}
+            {open && source.available !== false && (
               <p className="border-t-[0.5px] border-line px-3 py-2.5 text-[13px] leading-relaxed text-body">
                 {highlight?.chunkId === source.chunkId ? (
                   <Highlighted text={source.displayText} start={highlight.start} end={highlight.end} />

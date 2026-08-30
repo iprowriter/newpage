@@ -81,7 +81,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </Link>
 
         {/* Only the lists scroll, and only once they overflow. */}
-        <div className="scroll-quiet flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto">
+        <div className="scroll-quiet flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overscroll-contain">
           <Section
             icon={<CollectionIcon />}
             title="Collections"
@@ -145,7 +145,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <main className="scroll-quiet min-w-0 flex-1 overflow-y-auto">{children}</main>
+      <main className="scroll-quiet min-w-0 flex-1 overflow-y-auto overscroll-contain">{children}</main>
 
       {modalOpen && (
         <NewCollectionModal

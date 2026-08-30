@@ -32,6 +32,7 @@ export async function GET(request: Request) {
       rewriteFired: trace.rewriteFired,
       rewrittenAs: trace.rewrittenAs,
       retrieved: trace.retrieved,
+      citations: trace.citations,
       provider: trace.provider,
       model: trace.model,
       embeddingModel: trace.embeddingModel,

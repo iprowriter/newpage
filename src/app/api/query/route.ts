@@ -85,6 +85,7 @@ export async function POST(request: Request) {
         answer: state.answer ?? null,
         outcome: state.outcome === "answered" ? "answered" : "refused",
         refusalReason: state.refusalReason ?? null,
+        citations: state.citations,
         rewriteFired: state.rewrites > 0,
         rewrittenAs: state.rewrittenAs ?? null,
         gradeScore: state.gradeScore ?? null,

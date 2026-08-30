@@ -188,6 +188,12 @@ model QueryTrace {
   rewrittenAs  String?
   gradeScore   Float?
 
+  /// Which of the retrieved sources the answer actually drew on, by their 1-based
+  /// rank. Retrieval says what was *read*; this says what was *used*, and the two
+  /// differ on almost every query. Without it a trace cannot answer "did it cite
+  /// the passage that mattered", and a restored answer loses its attribution.
+  citations Int[]
+
   /// Retrieved chunk ids with scores, in rank order, for each attempt.
   retrieved Json
 

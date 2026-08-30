@@ -35,8 +35,9 @@ export function CollectionView({
   const [asking, setAsking] = useState(false);
   const [uploading, setUploading] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [truncated, setTruncated] = useState(false);
   const { provider } = useProvider();
-  const endRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
@@ -56,14 +57,70 @@ export function CollectionView({
     collectionsChanged();
   }, [load]);
 
+  /**
+   * Rebuild the thread when the collection changes.
+   *
+   * This used to clear `exchanges` and stop there, which meant every visit
+   * started blank and a conversation was lost the moment you looked at anything
+   * else. The questions were never actually lost: they were in `query_traces`
+   * the whole time, indexed on `(collectionId, createdAt)` for this read.
+   *
+   * `cancelled` matters because the sidebar makes it easy to click through
+   * several collections quickly, and a slow response for the first must not
+   * overwrite a fast one for the third.
+   */
   useEffect(() => {
+    let cancelled = false;
     setExchanges([]);
     setTab("ask");
+    setHistoryLoaded(false);
+    setTruncated(false);
     void load();
+
+    void (async () => {
+      try {
+        const response = await fetch(`/api/collections/${collectionId}/history`);
+        if (!response.ok || cancelled) return;
+        const data = (await response.json()) as { history: Exchange[]; truncated: boolean };
+        if (cancelled) return;
+        setExchanges(data.history);
+        setTruncated(data.truncated);
+      } catch {
+        // A history that will not load must not block asking a new question.
+        // The thread starts empty and the input still works.
+      } finally {
+        if (!cancelled) setHistoryLoaded(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [collectionId, load]);
 
+  /**
+   * Follow new answers, but land at the bottom of restored history rather than
+   * scrolling through it. Smoothly replaying a month of old questions on every
+   * visit would be a small piece of theatre at the reader's expense.
+   *
+   * Scrolls the thread pane by hand rather than calling `scrollIntoView` on a
+   * sentinel. `scrollIntoView` walks *every* scrollable ancestor to reveal the
+   * target, and `overflow: hidden` does not stop it — hidden containers are
+   * still scrollable from script. Here that meant the shell itself was being
+   * scrolled, which dragged the sidebar up off the top of the window while an
+   * answer was loading. Addressing the one element that should move cannot do
+   * that.
+   */
+  const jumped = useRef(false);
   useEffect(() => {
-    if (exchanges.length > 0) endRef.current?.scrollIntoView({ behavior: "smooth" });
+    jumped.current = false;
+  }, [collectionId]);
+
+  useEffect(() => {
+    const pane = scrollRef.current;
+    if (!pane || exchanges.length === 0) return;
+    pane.scrollTo({ top: pane.scrollHeight, behavior: jumped.current ? "smooth" : "instant" });
+    jumped.current = true;
   }, [exchanges]);
 
   const ready = useMemo(() => documents.filter((d) => d.status === "ready"), [documents]);
@@ -201,12 +258,12 @@ export function CollectionView({
       </header>
 
       {tab === "sources" ? (
-        <div className="scroll-quiet min-h-0 flex-1 overflow-y-auto pb-8">
+        <div className="scroll-quiet min-h-0 flex-1 overflow-y-auto overscroll-contain pb-8">
           <DocumentList documents={documents} onDeleted={loadAll} />
         </div>
       ) : (
         <>
-          <div ref={scrollRef} className="scroll-quiet min-h-0 flex-1 overflow-y-auto">
+          <div ref={scrollRef} className="scroll-quiet min-h-0 flex-1 overflow-y-auto overscroll-contain">
             <div className="flex flex-col gap-6 pb-6">
               <div className="flex flex-col gap-2">
                 <UploadZone uploading={uploading} onFiles={upload} />
@@ -217,7 +274,7 @@ export function CollectionView({
                 )}
               </div>
 
-              {exchanges.length === 0 && ready.length > 0 && (
+              {historyLoaded && exchanges.length === 0 && ready.length > 0 && (
                 <div>
                   {/* Offered before the questions, because orientation comes
                       before interrogation for someone who did not build this. */}
@@ -241,6 +298,16 @@ export function CollectionView({
                 </div>
               )}
 
+              {truncated && (
+                <p className="text-center text-xs text-muted">
+                  Showing the most recent questions. Every one is kept in{" "}
+                  <a href="/traces" className="text-accent underline-offset-2 hover:underline">
+                    traces
+                  </a>
+                  .
+                </p>
+              )}
+
               {exchanges.map((exchange, index) => (
                 <div key={`${index}-${exchange.question}`} className="flex flex-col gap-3">
                   <p className="text-[15px] font-medium text-ink">{exchange.question}</p>
@@ -262,7 +329,6 @@ export function CollectionView({
                   )}
                 </div>
               ))}
-              <div ref={endRef} />
             </div>
           </div>
 

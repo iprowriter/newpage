@@ -17,8 +17,15 @@ type Rating = "up" | "down";
  * complaint — and the set of them becomes an eval suite built from real
  * questions instead of ones I invented.
  */
-export function AnswerFeedback({ traceId }: { traceId: string }) {
-  const [rating, setRating] = useState<Rating | null>(null);
+export function AnswerFeedback({
+  traceId,
+  initial = null,
+}: {
+  traceId: string;
+  /** A rating this answer already carries, when it is being read back from history. */
+  initial?: Rating | null;
+}) {
+  const [rating, setRating] = useState<Rating | null>(initial);
   const [failed, setFailed] = useState(false);
 
   const send = async (next: Rating) => {

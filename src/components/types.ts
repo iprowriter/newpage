@@ -18,6 +18,12 @@ export interface Source {
   headingPath: string[];
   score: number;
   displayText: string;
+  /**
+   * False when the chunk is gone: the document was deleted after this answer was
+   * written. Restored history says so rather than dropping the citation, which
+   * would make an old answer look better sourced than it now is.
+   */
+  available?: boolean;
 }
 
 export interface AnswerPayload {
@@ -25,12 +31,16 @@ export interface AnswerPayload {
   outcome: "answered" | "refused";
   answer: string | null;
   refusalReason: string | null;
-  citations: number[];
+  citations?: number[];
   followUps: string[];
   sources: Source[];
   grade: { score: number | null; rewriteFired: boolean; rewrittenAs: string | null };
   timing: { totalMs: number; retrievalMs: number; generationMs: number };
   model: { provider: string; model: string; embeddingModel: string };
+  /** Present on restored history: the rating this answer already carries. */
+  feedback?: "up" | "down" | null;
+  /** Present on restored history: when the question was originally asked. */
+  askedAt?: string;
 }
 
 export interface QueryFailure {

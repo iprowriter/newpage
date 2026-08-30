@@ -19,24 +19,22 @@
  * degrades when the model paraphrased heavily. Hence "closest supporting
  * passage" rather than "citation".
  *
- * **What it can and cannot tell apart.** Measured on the FDA corpus, three
- * bands, and the honest reading of them shaped the API:
+ * **What it can and cannot tell apart.** Three bands, because measurement
+ * supports three and not two: wording that survived (`strong`), wording that
+ * only overlaps (`partial`), and nothing that supports the claim at all (null,
+ * and the reader is told so rather than handed the least-bad guess).
  *
- * - Verbatim or lightly reworded claims score 0.8–1.0, with the runner-up far
- *   behind. Reported as `strong`.
- * - Heavy paraphrase scores 0.40–0.50. So does a claim synthesised from two
- *   passages — and the runner-up margin does not separate them either (0.24 for
- *   a synthesised claim, 0.04–0.11 for genuine paraphrases, i.e. backwards).
- *   Lexical overlap cannot distinguish these, so the code does not pretend to:
- *   both are reported as `partial`, and the UI hedges rather than asserting the
- *   claim was drawn from there.
- * - A claim nothing supports scores 0.0, cleanly separated from both. Below
- *   `MIN_SCORE` this returns null and the reader is told no passage supports the
- *   selection, rather than being handed the least-bad guess.
+ * Crucially, `partial` covers *both* a heavy paraphrase and a claim assembled
+ * from two passages. Their score ranges overlap, so this cannot separate them
+ * and does not pretend to — the UI hedges on both. Telling the reader "probably
+ * here" when that is all the evidence supports is the same instinct as the
+ * refusal surface (ADR-0019); showing `partial` and `strong` identically is
+ * what would be wrong.
  *
- * Telling the reader "probably here" when that is all the evidence supports is
- * the same instinct as the refusal surface (ADR-0019). What would be wrong is
- * showing `partial` and `strong` identically.
+ * The measured ranges deliberately live in ADR-0024 and nowhere else, because
+ * they change when the corpus or the matcher changes. Re-measure with
+ * `npm run calibrate:attribution`; that script is the source of truth, and the
+ * thresholds below are set from its output.
  */
 import { splitSentences } from "./sentences";
 

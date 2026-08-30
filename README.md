@@ -116,9 +116,15 @@ to run the question locally.
 three starter questions generated from the actual documents. Each answer suggests two follow up
 questions, which come back in the same model call as the answer rather than costing a second one.
 
+**Your thread is still there when you come back.** Questions and answers for a collection are kept,
+so switching to another collection and returning does not wipe what you have already asked.
+Restored answers keep their sources, their scores and any rating you gave them. If a document has
+been deleted since, the citation says so rather than quietly disappearing. The history is read back
+from the same rows the trace viewer uses, so the two can never disagree (ADR-0025).
+
 **Feedback on answers.** A thumbs up or down under each answer lands on the stored trace, next to
 the passages and scores that produced it, so a bad answer can be investigated rather than just
-counted.
+counted. The rating comes back with the answer when history is restored.
 
 **Full observability.** Every query is stored and viewable at `/traces`: the question, the filter
 that was applied, every retrieved chunk with its score, the grading decision, whether the retry
@@ -384,6 +390,12 @@ assembled claim scores 0.20 to 0.32, and those ranges overlap. So the feature re
 "closest match" or "no single passage supports this" and does not pretend to a precision it does
 not have.
 
+**Conversation history reuses the trace table instead of a second messages table** (ADR-0025). The
+same row is the chat history, the observability record and the seed for an eval case, so they
+cannot drift apart. Building this also exposed a real gap: the trace recorded which passages were
+retrieved but not which ones the answer used, so a `citations` column was added and the trace
+viewer got better as a side effect.
+
 **Thresholds come from measurement, not intuition.** `npm run calibrate` sets the refusal floor
 from the score distribution of answerable versus unanswerable questions.
 `npm run calibrate:attribution` does the same for the attribution bands. This caught a real error:
@@ -412,7 +424,11 @@ Stated here rather than hidden, because you said you would rather see them ackno
 - **Only PDF, text and Markdown.** No `.docx` (ADR-0018).
 - **Ingestion is synchronous**, inside the upload request. Fine for demo sized files, wrong for a
   200 page batch.
-- **No conversation memory.** Each question is answered independently.
+- **No conversation memory, even though the thread is now saved.** The history is kept and shown,
+  but earlier turns are not fed back into the prompt, so "what about the second one" will not work.
+  Saving the thread and reasoning over it are two different features and only the first is built.
+- **History is capped** at the 20 most recent exchanges per collection, with a link to `/traces`
+  for everything older.
 - **Traces are kept forever**, with no retention policy or sampling.
 - **Jaeger stores in memory**, so those traces do not survive a restart. The built in viewer does.
 - **The judge is a model**, so groundedness carries the judge's own error.
@@ -525,10 +541,17 @@ CPU, since these requests are dominated by waiting on the model.
 
 **Secrets from a secrets manager**, not environment files. Keys rotate without a redeploy.
 
-**Trace retention and sampling.** Traces currently grow forever. In production that becomes a
-retention window, sampling on the high volume paths, and always keeping the full trace for any
-refusal or failure, since those are the ones anyone will want to read. Point the OTel exporter at
-the vendor of choice, which is one environment variable.
+**Trace retention and sampling, carefully.** Traces currently grow forever. In production that
+becomes a retention window, sampling on the high volume paths, and always keeping the full trace
+for any refusal or failure, since those are the ones anyone will want to read. Point the OTel
+exporter at the vendor of choice, which is one environment variable.
+
+There is a trap here worth naming, because the same rows are now also the user's chat history
+(ADR-0025). Expiring traces naively would silently delete people's conversations. The fix is to
+expire the diagnostic columns (retrieved ids, scores, token counts, timings) on a schedule while
+keeping the question, answer and citations for as long as the collection lives. That is a
+migration and a scheduled job, not a redesign, but it has to be decided before the first retention
+policy ships rather than after.
 
 **Cost and abuse controls.** Per tenant rate limits, a maximum documents and pages per collection,
 and a spend alarm on the model API. A cache keyed on the question plus the collection fingerprint
