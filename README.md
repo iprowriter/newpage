@@ -357,8 +357,7 @@ Measured, 26 cases:
 | local `llama3.2:3b` | 100% | 0.875 | n/a | n/a | 100% | **100%** |
 
 Retrieval is identical across the two because retrieval does not involve the generation model.
-The local row's refusal figures are carried over from the previous corpus and are being
-re-measured on this one; the retrieval columns are current.
+Both rows were measured on the current corpus.
 
 Both models score 100% on refusal, which is exactly why that number is never reported on its own.
 The local model earns its perfect refusal rate by refusing all twelve questions it should have

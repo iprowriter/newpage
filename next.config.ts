@@ -23,6 +23,39 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["pdfjs-dist"],
 
   /**
+   * ...and the same worker again, for the standalone build.
+   *
+   * `serverExternalPackages` restores the runtime `require`, but tracing decides
+   * what is actually *in* the image, and it only follows static imports. pdfjs
+   * resolves `pdf.worker.mjs` by path when `getDocument()` runs, so the trace
+   * never sees it: `.next/standalone` ships `pdfjs-dist` as the single file
+   * `legacy/build/pdf.mjs`, and the first upload into the container dies with
+   * "Setting up fake worker failed". Dev is immune — Turbopack symlinks
+   * `.next/node_modules/pdfjs-dist-<hash>` at the real package, where the whole
+   * build directory is present.
+   *
+   * The same blind spot costs `@napi-rs/canvas`, pdfjs's optional source of
+   * `DOMMatrix`; that one is answered in `src/lib/rag/extract-pdf.ts` rather than
+   * here, because 31 MB of Skia to evaluate a module is a poor trade for a path
+   * that rasterises nothing.
+   *
+   * The route glob is matched against the route path, so the dynamic segment is
+   * written as `*`. Verify after changing it: a key that matches nothing is a
+   * silent no-op, which is the same failure this is fixing.
+   *
+   * Turbopack traces the worker's 5.4 MB source map alongside it, and
+   * `outputFileTracingExcludes` does not drop it — tried as both a `**` glob and
+   * the exact path. Accepted rather than worked around: Node reads source maps
+   * only under `--enable-source-maps`, so it is inert weight, and the obvious
+   * `RUN rm` in the runner stage would not shrink the image anyway, because the
+   * file would still sit in the layer the COPY created. Deleting it in the
+   * builder, before the COPY, is where that belongs if it is ever worth 5.4 MB.
+   */
+  outputFileTracingIncludes: {
+    "/api/collections/*/documents": ["./node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs"],
+  },
+
+  /**
    * The dev-only route indicator, off.
    *
    * It renders bottom-left by default, which is exactly where the theme and

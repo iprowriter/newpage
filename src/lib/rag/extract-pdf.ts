@@ -59,7 +59,66 @@ export async function extractPdf(data: Uint8Array): Promise<ExtractedDocument> {
   return buildDocument(kept, bodySize, pageCount);
 }
 
+/**
+ * pdfjs takes `DOMMatrix` and `Path2D` from `@napi-rs/canvas`, an optional
+ * dependency it `require`s by name inside a try/catch. Next's file tracing only
+ * follows static imports, so `output: "standalone"` ships pdfjs without it: the
+ * polyfill is skipped, and pdf.mjs then dies evaluating its own module scope on
+ * a top-level `new DOMMatrix()`. Container only — `next dev` resolves pdfjs
+ * through a symlink to the real node_modules, where the optional dependency is
+ * installed, so the whole failure is invisible until the image runs.
+ *
+ * Tracing the real package would fix it and cost ~31 MB of Skia to supply two
+ * geometry classes this path never uses: extraction calls `getTextContent()`,
+ * which reads transforms out of the content stream, and every `DOMMatrix` and
+ * `Path2D` operation in pdfjs sits behind canvas rendering — which happens in
+ * the browser viewer (ADR-0018), not here. So they are supplied inert instead.
+ * Constructing one succeeds, which is all module evaluation needs; touching
+ * anything on one throws. A server-side render path added later fails on its
+ * first line, with the reason, rather than drawing silent nonsense.
+ *
+ * Installed before the import, so pdfjs finds the globals already set and skips
+ * its own polyfill even where the real package is present. That is deliberate:
+ * dev then behaves like the image, instead of quietly having a capability the
+ * shipped artefact lacks.
+ *
+ * pdfjs still logs one `Cannot load "@napi-rs/canvas"` warning where the package
+ * is absent — its `require` is unconditional, and runs before `verbosity` can be
+ * set. Once per process, not per document, and accurate; left alone. The
+ * `Cannot polyfill` warning that used to follow it is what this removes.
+ */
+function installInertCanvasGlobals(): void {
+  // Typed through Record rather than the DOM lib's declarations, which assert
+  // both globals always exist — under Node neither does.
+  const globals = globalThis as unknown as Record<string, unknown>;
+
+  for (const name of ["DOMMatrix", "Path2D"]) {
+    if (globals[name] !== undefined) continue;
+
+    // A proxy on the prototype rather than a list of stubbed methods: every
+    // access is refused, so nothing drifts out of date as pdfjs changes.
+    const refuse = new Proxy(
+      {},
+      {
+        get(_target, property) {
+          throw new Error(
+            `${name}.${String(property)} was used during PDF extraction. This build has ` +
+              "no canvas implementation: the server reads text only, and rendering belongs " +
+              "to the browser viewer.",
+          );
+        },
+      },
+    );
+
+    const Inert = class {};
+    Object.setPrototypeOf(Inert.prototype, refuse);
+    Object.defineProperty(Inert, "name", { value: name });
+    globals[name] = Inert;
+  }
+}
+
 async function readLines(data: Uint8Array): Promise<Line[]> {
+  installInertCanvasGlobals();
   // The legacy build is the one that runs under Node. Imported dynamically so
   // this module stays cheap for callers that only need the text extractor.
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
