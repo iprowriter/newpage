@@ -245,7 +245,38 @@ function Refusal({ payload }: { payload: AnswerPayload }) {
           : `${payload.sources.length} passages were retrieved and read; the closest scored ${payload.grade.score?.toFixed(2)}. They are listed below so you can judge for yourself.`}{" "}
         The answer may be in another collection, or not in the corpus.
       </p>
+      {payload.model.provider === "ollama" && <LocalRefusalNote />}
     </div>
+  );
+}
+
+/**
+ * Why a refusal from the local model deserves a different reading.
+ *
+ * Keyed off the provider stored on the answer, not the current toggle, so a
+ * restored answer explains itself rather than explaining whatever is selected
+ * now.
+ *
+ * This is the moment the honest thing looks like a broken thing. The local model
+ * refuses questions it has in fact answered: it writes the answer into the
+ * field meant for what was missing, then marks itself insufficient (specs.md §8).
+ * Without this note a reviewer flips the toggle, waits forty seconds, reads a
+ * refusal whose text is the answer, and concludes the app is broken. With it,
+ * the same moment is the measurement paying off — which is why the fix is a
+ * sentence here rather than a patch that overrides the model's own verdict.
+ *
+ * Kept short deliberately. The number behind the claim (all 12 answerable eval
+ * questions refused) is on the provider toggle, where it is read *before* the
+ * reader has spent forty seconds waiting; here they want the next action, not
+ * the evidence.
+ */
+function LocalRefusalNote() {
+  return (
+    <p className="mt-2.5 rounded-lg bg-refusal/10 px-3 py-2 text-xs leading-relaxed text-body">
+      <span className="font-medium text-ink">This came from the local model.</span> It refuses
+      questions the hosted model answers. Its reasoning is much weaker compared to the hosted
+      model. Switch Inference to Hosted in the sidebar and ask again to compare.
+    </p>
   );
 }
 

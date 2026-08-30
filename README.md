@@ -18,6 +18,10 @@ You need Docker, and a Gemini API key. The key is free and takes about two minut
 https://aistudio.google.com/apikey. No key is committed to this repo, and none is needed to read
 the code.
 
+You do **not** need to install Ollama. Embeddings run in a container that Compose starts and
+populates for you, so `docker compose up` is self-contained. Ollama on your own machine is needed
+only if you want to switch generation to the local model, which is optional and covered below.
+
 ```bash
 git clone <this repo>
 cd newpage
@@ -38,8 +42,9 @@ When it settles, open:
 | Trace viewer (built in) | http://localhost:3000/traces |
 | Jaeger (OpenTelemetry) | http://localhost:16686 |
 
-Every published port is high on purpose (Postgres on 55432, Qdrant on 56333) so that starting this
-project cannot collide with a Postgres or Qdrant you already run. All of them are bound to
+Every published port is high on purpose (Postgres on 55432, Qdrant on 56333, the embedding model on
+11435) so that starting this project cannot collide with a Postgres, Qdrant or Ollama you already
+run. All of them are bound to
 127.0.0.1, so nothing is exposed to your network.
 
 ### Running it without Docker
@@ -53,6 +58,12 @@ npm run db:migrate
 npm run seed          # ingests the demo corpus
 npm run dev
 ```
+
+Uncomment `EMBEDDING_BASE_URL=http://localhost:11435` in `.env.local` first. Compose publishes the
+embedding container on 11435, and that line is what points the host-side app at it. Without it the
+app falls back to looking for Ollama on your own machine at 11434, and ingestion fails on a machine
+that does not have it. Port 11435 rather than 11434 so it cannot collide with a host Ollama you may
+already be running.
 
 ### Running the model locally instead of Gemini
 
@@ -417,7 +428,11 @@ Stated here rather than hidden, because you said you would rather see them ackno
   pointer, which is the right direction, but "highlight anything and it will find the source" is
   not true.
 - **The local model refuses everything answerable.** Documented above, with the cause identified
-  and deliberately not papered over.
+  and deliberately not papered over. The app says so at both points where it matters: the provider
+  toggle warns before you switch, and a refusal produced by the local model carries a note
+  explaining that it is weak evidence the corpus lacks the answer, and inviting you to compare
+  against the hosted model. The measurement is surfaced in the product rather than buried in this
+  file.
 - **PDF extraction is basic.** Multi column layouts can interleave, tables flatten to text, and
   there is no OCR, so a scanned document ingests as nothing. Zero extracted text is a hard failure
   with a clear message rather than a silent empty ingest.

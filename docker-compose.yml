@@ -72,6 +72,13 @@ services:
   ollama:
     image: ollama/ollama:0.5.7
     restart: unless-stopped
+    ports:
+      # Published so a host-side `npm run dev` can embed against this container
+      # rather than needing Ollama installed on the machine. 11435, not 11434,
+      # for the same reason Postgres is on 55432: the default would collide with
+      # a host Ollama, and on that collision the app would silently embed against
+      # whichever one answered first.
+      - "127.0.0.1:${OLLAMA_EMBEDDING_PORT:-11435}:11434"
     volumes:
       - ollamadata:/root/.ollama
     # Serve, then pull the embedding model in the background. The pull is ~275MB

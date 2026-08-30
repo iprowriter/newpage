@@ -21,6 +21,24 @@ const nextConfig: NextConfig = {
    * script is not a substitute for exercising the real route.
    */
   serverExternalPackages: ["pdfjs-dist"],
+
+  /**
+   * The dev-only route indicator, off.
+   *
+   * It renders bottom-left by default, which is exactly where the theme and
+   * provider toggles live, so it sat on top of controls a reviewer is meant to
+   * click. `position: "bottom-right"` would also clear them and keep the
+   * indicator; off is the choice here because the sidebar's bottom row is the
+   * one part of the UI a screenshot has to show unobstructed.
+   *
+   * Dev only either way: the containerised app runs a production build and never
+   * rendered it. Compile and runtime errors are still surfaced.
+   *
+   * Note for anyone porting a config from an older Next: `buildActivity` and
+   * `buildActivityPosition` were removed in v16, and setting them here does
+   * nothing. `devIndicators: false` is the v16 spelling.
+   */
+  devIndicators: false,
 };
 
 export default nextConfig;

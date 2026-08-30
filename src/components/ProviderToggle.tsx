@@ -34,10 +34,13 @@ export function ProviderToggle() {
         ))}
       </div>
       {provider === "ollama" && (
-        // Said up front so slowness reads as expected rather than broken. Docker
-        // Desktop gives containers no GPU on macOS, so the local path is CPU-bound.
+        // Said up front so slowness reads as expected rather than broken, and so
+        // the refusals do too. Docker Desktop gives containers no GPU on macOS,
+        // so the local path is CPU-bound; the under-answering is a separate and
+        // measured problem (ADR-0015, and the eval table in the README).
         <p className="mt-1.5 text-xs leading-snug text-muted">
-          Runs on your machine. Nothing leaves it, and answers take tens of seconds.
+          Runs on your machine. Nothing leaves it, and answers take tens of seconds. It also
+          under-answers: on the eval set it refused all 12 questions it should have answered.
         </p>
       )}
     </div>

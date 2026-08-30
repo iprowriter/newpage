@@ -355,7 +355,8 @@ Env-driven, `.env.example` with placeholders and no real key ever committed (ADR
 LLM_PROVIDER=gemini|ollama
 GEMINI_API_KEY=            # reviewer supplies their own; free tier is sufficient
 GEMINI_MODEL=              # pinned id, never -latest
-OLLAMA_BASE_URL=http://host.docker.internal:11434
+OLLAMA_BASE_URL=http://host.docker.internal:11434   # generation: the host
+EMBEDDING_BASE_URL=http://ollama:11434              # embeddings: the container
 OLLAMA_MODEL=              # pinned
 EMBEDDING_MODEL=           # pinned; changing it means drop + reindex
 DATABASE_URL= / QDRANT_URL=
