@@ -654,5 +654,38 @@ real regulatory documents will hurt the current extractor most.
 
 ## App Screenshots
 
-### HomePage Chat Interface
-![Alt Text](public/app-screenshots-with-explainers/1.homepage_new_chat.png)
+### 1. HomePage Chat Interface
+![chat interface](public/app-screenshots-with-explainers/1.homepage_new_chat.png)
+
+### 2. Create New Collection
+![create new collection](public/app-screenshots-with-explainers/2.create_new_collection.png)
+
+### 3. Document Embedding
+![document embedding](public/app-screenshots-with-explainers/3.document_ingestion_chuncking.png)
+
+### 4. Embedding Completed
+![embedding completed](public/app-screenshots-with-explainers/4.ingestion_completed.png)
+
+### 5. Summary Generation
+![summary generation](public/app-screenshots-with-explainers/5.summary_generation.png)
+
+### 6. Chat with Doc (and see sources)
+![chat with sources](public/app-screenshots-with-explainers/6.chat_with_sources_and_auto_questions.png)
+
+### 7. Answer Sources
+![answer sources](public/app-screenshots-with-explainers/7.sources_for_the_answer.png)
+
+### 8. Answer Sources Expanded
+![answer sources expanded](public/app-screenshots-with-explainers/8.sources_for_answer_expanded.png)
+
+### 9. Collection Documents (Sources)
+![collection doc sources](public/app-screenshots-with-explainers/9.collection_doc_sources.png)
+
+### 10. Observability Homepage
+![observability homepage](public/app-screenshots-with-explainers/10.observability_traces_homepage.png)
+
+### 11. Observability Detail Page
+![observability detail page](public/app-screenshots-with-explainers/11.observability_traces_detail.png)
+
+### 12. Dark theme
+![dark theme](public/app-screenshots-with-explainers/12.dark_theme.png)
