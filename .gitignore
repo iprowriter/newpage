@@ -32,6 +32,9 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...but the template must ship: the quick-start opens with `cp .env.example .env.local`,
+# and `.env*` above would otherwise keep it out of a fresh clone. It holds no secrets.
+!.env.example
 
 # vercel
 .vercel

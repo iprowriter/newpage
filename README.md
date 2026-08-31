@@ -18,7 +18,16 @@ less than 4 minutes to completely boot up the application from the docker contai
 Design notes live in [`specs.md`](specs.md). Every decision below has a numbered record in
 [`docs/adr/`](docs/adr/) with the options that were considered and the reason the losing ones lost.
 
-Please find relevant screenshots for this project at the end of this file.
+## Demo video
+
+A walkthrough of the running application is here:
+
+**https://youtu.be/m2XrP7cQ35I**
+
+Just under six minutes, covering collection creation, ingestion, a cited answer, a refusal, and the
+trace viewer. It is a silent screen capture, so there is no audio to miss.
+
+Still screenshots of the same flows are at the end of this file.
 
 ---
 
@@ -649,7 +658,6 @@ real regulatory documents will hurt the current extractor most.
 | `scripts/calibrate*.mts` | Where the thresholds came from. |
 | `docs/adr/` | Why any of it is the way it is. |
 | `specs.md` | The design, in one document. |
-| `docs/working-notes.md` | My build log, kept for honesty rather than polish. |
 
 
 ## App Screenshots
