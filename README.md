@@ -1,4 +1,6 @@
-# Newpage document assistant
+# What Is This Project?
+
+## Document Assistant (Chat With Your Docs)
 
 Ask questions about a collection of documents and get an answer that cites the exact passage it
 came from. When the documents do not contain the answer, the system says so instead of guessing.
@@ -8,17 +10,19 @@ eight FDA guidance documents split across two departments, because that audience
 design is aimed at: in a regulated industry, a confident wrong answer costs more than no answer at
 all.
 
-Each of those eight is a **three page excerpt** rather than the complete guidance. That is
-deliberate, and ADR-0017 records why: embedding the full 291 pages on CPU inside the container took
-eleven minutes, and a reviewer's first `docker compose up` should not look like a hang. The pages
-kept are the ones the eval set actually asks about, chosen using the application's own extractor.
+Each of those eight is a **three page excerpt** rather than the complete guidance. This is done to
+reduce the cold-start up time when we run `docker compose up`. At the moment, it would take a little
+less than 4 minutes to completely boot up the application from the docker container.
+
 
 Design notes live in [`specs.md`](specs.md). Every decision below has a numbered record in
 [`docs/adr/`](docs/adr/) with the options that were considered and the reason the losing ones lost.
 
+Please find relevant screenshots for this project at the end of this file.
+
 ---
 
-## 1. Quick setup
+## 1. Quick setup (How To Run This Application)
 
 You need Docker, and a Gemini API key. The key is free and takes about two minutes to create at
 https://aistudio.google.com/apikey. No key is committed to this repo, and none is needed to read
@@ -29,7 +33,7 @@ populates for you, so `docker compose up` is self-contained. Ollama on your own 
 only if you want to switch generation to the local model, which is optional and covered below.
 
 ```bash
-git clone <this repo>
+git clone https://github.com/iprowriter/newpage.git
 cd newpage
 cp .env.example .env.local
 # open .env.local and paste your key into GEMINI_API_KEY
@@ -50,8 +54,8 @@ from completely empty volumes:
 
 **The app is usable long before the corpus finishes.** Seeding deliberately runs after the app is
 serving, so you can open it, watch documents move through `pending`, `processing` and `ready`, and
-start asking questions of the collections that have finished. A silent five minute wait before
-anything rendered would be a worse first impression than watching it fill.
+start asking questions of the collections that have finished. The reason for this is simple: A silent 
+five minute wait before anything rendered would be a worse first impression than watching it fill.
 
 Indexing runs on CPU inside the container, which is the trade that lets `docker compose up` work
 with nothing installed on your machine. Subsequent starts reuse the volumes and are quick.
@@ -66,8 +70,7 @@ When it settles, open:
 
 Every published port is high on purpose (Postgres on 55432, Qdrant on 56333, the embedding model on
 11435) so that starting this project cannot collide with a Postgres, Qdrant or Ollama you already
-run. All of them are bound to
-127.0.0.1, so nothing is exposed to your network.
+run. All of them are bound to 127.0.0.1, so nothing is exposed to your network.
 
 ### Running it without Docker
 
@@ -95,10 +98,11 @@ The app ships with a second provider. If you have [Ollama](https://ollama.com) o
 ollama pull llama3.2:3b
 # then flip the provider toggle at the bottom of the sidebar, or set LLM_PROVIDER=ollama
 ```
-
-This path is honest rather than flattering, and section 6 explains what it does badly. It is here
-because "no document leaves this machine" is a real requirement for some clients, and because it
-is a useful answer when the hosted model is rate limited.
+It is important to mention that using ollama for retrieval and generation does not perform as
+good as using hosted inference such as Gemini. I decided to add it anyway to fulfill the 
+privacy concerns some users may have while using this app. If you never want your document
+to end up on Gemini server or any third-party server, then please use the Ollama. The trade-off 
+is speed and quality of the answers. 
 
 ### Useful commands
 
@@ -115,11 +119,11 @@ npm run calibrate:attribution       sets the attribution thresholds from measure
 
 ---
 
-## 2. What it does
+## 2. What This App Does
 
 **Collections.** You create a named collection (Clinical Operations, Manufacturing Quality) and
 upload documents into it. Questions are answered only from the collection you are asking. This is
-the data isolation story: Marketing can never see what Legal uploaded.
+the data isolation story: 'Marketing' can never see what 'Legal' uploaded.
 
 **Chats.** If you just want to ask about one file, you upload it without naming anything first. A
 chat is created behind the scenes on that first upload, not on the click that got you there, so
@@ -146,15 +150,12 @@ to run the question locally.
 three starter questions generated from the actual documents. Each answer suggests two follow up
 questions, which come back in the same model call as the answer rather than costing a second one.
 The summary is generated only when asked for, but it is kept once it exists: it comes back with the
-collection and stays above the thread, collapsed, with a "Summarise again" button. Add or remove a
-document and it is withheld rather than shown stale, because it now describes a collection that is
-no longer there (ADR-0026).
+collection and stays above the thread, collapsed, with a "Summarise again" button. 
 
 **Your thread is still there when you come back.** Questions and answers for a collection are kept,
 so switching to another collection and returning does not wipe what you have already asked.
 Restored answers keep their sources, their scores and any rating you gave them. If a document has
-been deleted since, the citation says so rather than quietly disappearing. The history is read back
-from the same rows the trace viewer uses, so the two can never disagree (ADR-0025).
+been deleted since, the citation says so rather than quietly disappearing. 
 
 **Feedback on answers.** A thumbs up or down under each answer lands on the stored trace, next to
 the passages and scores that produced it, so a bad answer can be investigated rather than just
@@ -163,7 +164,8 @@ counted. The rating comes back with the answer when history is restored.
 **Full observability.** Every query is stored and viewable at `/traces`: the question, the filter
 that was applied, every retrieved chunk with its score, the grading decision, whether the retry
 fired, latency for each stage, token counts and the exact model id. The same information is
-emitted as OpenTelemetry spans to Jaeger, which ships in the Compose file.
+emitted as OpenTelemetry spans to Jaeger, which ships in the Compose file. 
+While on localhost, find the observability here: (http://localhost:3000/traces)
 
 **Light and dark themes**, an explicit toggle rather than a guess based on your operating system.
 
@@ -283,9 +285,9 @@ forget it, which shaped the guardrail described below.
 
 ### Language model
 
-**Gemini by default, `gemini-3.6-flash`, pinned.** It has a free tier good enough for a reviewer
-to run the whole eval harness, it is fast, and it supports structured output, which is how the
-answer and its follow up questions come back in a single call.
+**Gemini by default, `gemini-3.6-flash`, pinned.** It has a free tier good enough to run the whole
+eval harness, it is fast, and it supports structured output, which is how the answer and its follow 
+up questions come back in a single call.
 
 **Ollama with `llama3.2:3b` as a second provider**, selectable at runtime from the sidebar. Both
 sit behind one small interface, which also happens to be the seam the tests mock, so the entire
@@ -360,16 +362,6 @@ Measured, 26 cases:
 Retrieval is identical across the two because retrieval does not involve the generation model.
 Both rows were measured on the current corpus.
 
-Both models score 100% on refusal, which is exactly why that number is never reported on its own.
-The local model earns its perfect refusal rate by refusing all twelve questions it should have
-answered. I checked the cause rather than guessing at it: the small model returns valid JSON
-containing the correct answer and then sets `sufficient: false`. It is not a schema problem or a
-retrieval problem, it is the model failing to assess its own output.
-
-I deliberately did not patch this. Overriding that flag when the answer "looks substantial" would
-recover the local path by destroying the guardrail that catches the genuinely dangerous case,
-which is passages on the right topic that never actually state the answer.
-
 ### Observability
 
 Two views, because they answer different questions and neither replaces the other.
@@ -392,10 +384,8 @@ Honeycomb. That one variable is the whole integration.
 Each of these has a full record in `docs/adr/` with the alternatives and the trade-off.
 
 **Full stack Next.js, one service, not a separate API.** I planned two services and changed my
-mind before writing much code (ADR-0006, superseded by ADR-0007). For a system whose interesting
-parts are retrieval quality and provenance, a second deployable adds ceremony without adding
-anything a reviewer can grade. The framework independence I actually wanted came from the import
-rule instead, which is cheaper and stronger.
+mind before writing much code (ADR-0006, superseded by ADR-0007). The purpose is to keep it
+small and testable.
 
 **TypeScript, not Python** (ADR-0011). Python is the default choice for RAG and I seriously
 reconsidered it. TypeScript won because one language across the UI, the API and the retrieval core
@@ -660,3 +650,9 @@ real regulatory documents will hurt the current extractor most.
 | `docs/adr/` | Why any of it is the way it is. |
 | `specs.md` | The design, in one document. |
 | `docs/working-notes.md` | My build log, kept for honesty rather than polish. |
+
+
+## App Screenshots
+
+### HomePage Chat Interface
+![Alt Text](public/app-screenshots-with-explainers/1.homepage_new_chat.png)
